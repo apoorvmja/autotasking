@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase/client";
-import type { Platform, PostQueueContentType, PostingDestination } from "@/lib/types/schema";
+import type { Platform, PostingDestination } from "@/lib/types/schema";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -17,11 +17,6 @@ const body = Manrope({
 });
 
 const platformOptions: Platform[] = ["Reddit", "Facebook", "YouTube", "Other"];
-const contentTypeOptions: { value: PostQueueContentType; label: string }[] = [
-  { value: "question", label: "Daily question" },
-  { value: "university", label: "University spotlight" },
-  { value: "cost", label: "Cost snapshot" },
-];
 
 function formatDate(value: string | null) {
   if (!value) return "";
@@ -35,10 +30,10 @@ function formatDate(value: string | null) {
   }).format(date);
 }
 
+
 export default function AdminPage() {
   const [destinations, setDestinations] = useState<PostingDestination[]>([]);
   const [platform, setPlatform] = useState<Platform>("Reddit");
-  const [contentType, setContentType] = useState<PostQueueContentType>("question");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(true);
@@ -53,11 +48,7 @@ export default function AdminPage() {
       acc[item.platform] = (acc[item.platform] ?? 0) + 1;
       return acc;
     }, {});
-    const typeCounts = destinations.reduce<Record<string, number>>((acc, item) => {
-      acc[item.content_type] = (acc[item.content_type] ?? 0) + 1;
-      return acc;
-    }, {});
-    return { total: destinations.length, lastAdded, platformCounts, typeCounts };
+    return { total: destinations.length, lastAdded, platformCounts };
   }, [destinations]);
 
   const missingTable = error?.toLowerCase().includes("does not exist");
@@ -67,7 +58,7 @@ export default function AdminPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("posting_destinations")
-      .select("id,platform,content_type,name,url,created_at")
+      .select("id,platform,name,url,created_at")
       .order("created_at", { ascending: false });
     if (error) {
       setError(error.message);
@@ -84,13 +75,12 @@ export default function AdminPage() {
     const trimmedName = name.trim();
     if (!trimmedName) return;
     setSaving(true);
-    const payload = { platform, content_type: contentType, name: trimmedName, url: url.trim() || null };
+    const payload = { platform, name: trimmedName, url: url.trim() || null };
     const { error } = await supabase.from("posting_destinations").insert(payload);
     if (error) {
       setError(error.message);
     } else {
       setPlatform("Reddit");
-      setContentType("question");
       setName("");
       setUrl("");
       setError(null);
@@ -154,14 +144,6 @@ export default function AdminPage() {
                   {item}: {stats.platformCounts[item] ?? 0}
                 </div>
               ))}
-              {contentTypeOptions.map((option) => (
-                <div
-                  key={option.value}
-                  className="rounded-full border-2 border-[var(--ink)] bg-white px-3 py-1"
-                >
-                  {option.label}: {stats.typeCounts[option.value] ?? 0}
-                </div>
-              ))}
             </div>
           </header>
 
@@ -206,22 +188,6 @@ export default function AdminPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
-                    Content type
-                  </label>
-                  <select
-                    className="w-full rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
-                    value={contentType}
-                    onChange={(event) => setContentType(event.target.value as PostQueueContentType)}
-                  >
-                    {contentTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
                     Link (optional)
                   </label>
                   <input
@@ -257,7 +223,7 @@ export default function AdminPage() {
                   {missingTable && (
                     <div className="mt-4 rounded-xl bg-[var(--paper)] p-3 text-xs text-[var(--ink)]">
                       Create table: id uuid primary key default gen_random_uuid(), platform text not null,
-                      content_type text not null, name text not null, url text, created_at timestamptz default now()
+                      name text not null, url text, created_at timestamptz default now()
                     </div>
                   )}
                   {rlsBlocked && (
@@ -293,14 +259,9 @@ export default function AdminPage() {
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-[var(--ink)]">{destination.name}</div>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
-                            {destination.platform}
-                          </span>
-                          <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
-                            {destination.content_type}
-                          </span>
-                        </div>
+                        <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
+                          {destination.platform}
+                        </span>
                       </div>
                       {destination.url && (
                         <a
@@ -347,6 +308,7 @@ export default function AdminPage() {
               </div>
             ))}
           </section>
+
         </main>
       </div>
     </div>
