@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type CSSProperties } from "react";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -43,20 +43,22 @@ export default function LoginPage() {
     }
   }
 
+  const themeVars = {
+    "--ink": "#0f172a",
+    "--ink-soft": "#475569",
+    "--paper": "#f8fafc",
+    "--surface": "#ffffff",
+    "--accent": "#f97316",
+    "--accent-soft": "#ffedd5",
+    "--mint": "#14b8a6",
+    "--sky": "#38bdf8",
+    "--sun": "#facc15",
+  } as CSSProperties;
+
   return (
     <div
       className={`min-h-screen ${body.className} bg-[var(--paper)] text-[var(--ink)]`}
-      style={{
-        "--ink": "#0f172a",
-        "--ink-soft": "#475569",
-        "--paper": "#f8fafc",
-        "--surface": "#ffffff",
-        "--accent": "#f97316",
-        "--accent-soft": "#ffedd5",
-        "--mint": "#14b8a6",
-        "--sky": "#38bdf8",
-        "--sun": "#facc15",
-      }}
+      style={themeVars}
     >
       <div className="relative overflow-hidden bg-[radial-gradient(circle_at_top,_#ffffff,_#f8fafc_35%,_#e2e8f0_100%)]">
         <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-[48px] bg-[var(--sun)]/70 blur-[1px]" />

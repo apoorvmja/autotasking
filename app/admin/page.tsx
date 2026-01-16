@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type CSSProperties } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Intern, Platform, PostingDestination, YoutubeVideo } from "@/lib/types/schema";
 
@@ -301,20 +301,22 @@ export default function AdminPage() {
     void loadSummary();
   }, []);
 
+  const themeVars = {
+    "--ink": "#0f172a",
+    "--ink-soft": "#475569",
+    "--paper": "#f8fafc",
+    "--surface": "#ffffff",
+    "--accent": "#f97316",
+    "--accent-soft": "#ffedd5",
+    "--mint": "#14b8a6",
+    "--sky": "#38bdf8",
+    "--sun": "#facc15",
+  } as CSSProperties;
+
   return (
     <div
       className={`min-h-screen ${body.className} bg-[var(--paper)] text-[var(--ink)]`}
-      style={{
-        "--ink": "#0f172a",
-        "--ink-soft": "#475569",
-        "--paper": "#f8fafc",
-        "--surface": "#ffffff",
-        "--accent": "#f97316",
-        "--accent-soft": "#ffedd5",
-        "--mint": "#14b8a6",
-        "--sky": "#38bdf8",
-        "--sun": "#facc15",
-      }}
+      style={themeVars}
     >
       <div className="relative overflow-hidden">
         <div className="pointer-events-none absolute -left-24 top-10 h-64 w-64 rounded-[48px] bg-[var(--sky)]/60" />
