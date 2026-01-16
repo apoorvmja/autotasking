@@ -49,6 +49,7 @@ Fields: username, password, created_at.
 - Drafts are generated automatically and displayed (no button).
 - Daily checklist + assigned tasks UI is removed.
 - Intern can mark each subreddit task as Done/Not done for today.
+- Facebook moderation tasks are listed with the same Done/Not done tracking.
 
 ## 9. Daily Task Generation Rules (LLM)
 Deterministic, simple, and only triggered once per IST day. (Currently not shown in UI.)
@@ -88,6 +89,10 @@ LLM formatting rules:
 ### 10.4 Reddit Task Completion
 - Each subreddit can be marked Done or Not done for the current IST date.
 - Completion is stored per intern, per destination, per day.
+
+### 10.5 Facebook Moderation Task
+- Intern opens group, sorts by newest, reviews top 5 posts, removes spam comments.
+- Each group can be marked Done/Not done for the current IST date.
 
 ## 11. Error & Edge Cases
 - **Missing prompt**: "Prompt missing" is shown for that subreddit.
@@ -160,8 +165,16 @@ RLS policies (minimum required):
 - Body: `{ destinationId, completed }`
 - Response: `{ ok: true, completed }`
 
+### 13.8 Facebook Status
+- `GET /api/facebook-status`
+- Response: `{ items: [{ destination_id, completed }] }`
+- `POST /api/facebook-status`
+- Body: `{ destinationId, completed }`
+- Response: `{ ok: true, completed }`
+
 ## 14. Success Criteria
 - Intern sees Reddit drafts without asking for instructions.
+- Intern sees Facebook moderation tasks without asking for instructions.
 - Admin can update destinations/prompts without developer help.
 - Drafts generate automatically on page load.
 - Reddit drafts are consistent and usable with minimal edits.
@@ -174,6 +187,7 @@ RLS policies (minimum required):
 - [x] Admin-managed intern logins
 - [x] Supabase schema + policies for tasks/destinations
 - [x] Reddit task completion tracking (per day)
+- [x] Facebook moderation tracking (per day)
 - [ ] Auto-posting/scheduling (future)
 ### 12.3 Table: `interns`
 - `id` uuid primary key
@@ -182,6 +196,15 @@ RLS policies (minimum required):
 - `created_at` timestamptz default now()
 
 ### 12.4 Table: `reddit_task_status`
+- `id` uuid primary key
+- `intern_id` uuid references interns(id)
+- `destination_id` uuid references posting_destinations(id)
+- `task_date` date (IST day)
+- `completed` boolean
+- `completed_at` timestamptz nullable
+- `created_at` timestamptz default now()
+
+### 12.5 Table: `facebook_task_status`
 - `id` uuid primary key
 - `intern_id` uuid references interns(id)
 - `destination_id` uuid references posting_destinations(id)

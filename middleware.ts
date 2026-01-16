@@ -55,6 +55,7 @@ export const config = {
     "/api/daily-tasks",
     "/api/reddit-prompt",
     "/api/reddit-status",
+    "/api/facebook-status",
     "/api/interns",
     "/api/tasks",
   ],

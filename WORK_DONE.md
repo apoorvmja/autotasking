@@ -43,6 +43,17 @@
 - UI toggles: `app/tasks/page.tsx`
 - Supabase migration: `supabase/migrations/0010_reddit_task_status.sql`
 
+## Feature: Facebook moderation tasks
+
+### Completed
+- Intern sees Facebook groups with step-by-step moderation instructions.
+- Per-group completion tracking for the current IST day.
+
+### Code locations
+- Status API: `app/api/facebook-status/route.ts`
+- UI section: `app/tasks/page.tsx`
+- Supabase migration: `supabase/migrations/0011_facebook_task_status.sql`
+
 ### Code locations
 - Intern admin UI: `app/admin/page.tsx`
 - Login API: `app/api/login/route.ts`

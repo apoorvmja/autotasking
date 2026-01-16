@@ -18,8 +18,11 @@ const body = Manrope({
 
 export default function TasksPage() {
   const [redditDestinations, setRedditDestinations] = useState<PostingDestination[]>([]);
+  const [facebookDestinations, setFacebookDestinations] = useState<PostingDestination[]>([]);
   const [redditLoading, setRedditLoading] = useState(true);
+  const [facebookLoading, setFacebookLoading] = useState(true);
   const [redditError, setRedditError] = useState<string | null>(null);
+  const [facebookError, setFacebookError] = useState<string | null>(null);
   const [promptResults, setPromptResults] = useState<
     Record<string, { title: string; description: string }>
   >({});
@@ -32,6 +35,10 @@ export default function TasksPage() {
   const [statusLoading, setStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [statusSaving, setStatusSaving] = useState<Record<string, boolean>>({});
+  const [facebookStatusMap, setFacebookStatusMap] = useState<Record<string, boolean>>({});
+  const [facebookStatusLoading, setFacebookStatusLoading] = useState(true);
+  const [facebookStatusError, setFacebookStatusError] = useState<string | null>(null);
+  const [facebookStatusSaving, setFacebookStatusSaving] = useState<Record<string, boolean>>({});
 
   async function loadRedditDestinations() {
     setRedditLoading(true);
@@ -48,6 +55,23 @@ export default function TasksPage() {
       setRedditDestinations(data ?? []);
     }
     setRedditLoading(false);
+  }
+
+  async function loadFacebookDestinations() {
+    setFacebookLoading(true);
+    const { data, error } = await supabase
+      .from("posting_destinations")
+      .select("id,platform,name,url,prompt,created_at")
+      .eq("platform", "Facebook")
+      .order("created_at", { ascending: false });
+    if (error) {
+      setFacebookError(error.message);
+      setFacebookDestinations([]);
+    } else {
+      setFacebookError(null);
+      setFacebookDestinations(data ?? []);
+    }
+    setFacebookLoading(false);
   }
 
   async function loadStatus() {
@@ -74,6 +98,30 @@ export default function TasksPage() {
     setStatusLoading(false);
   }
 
+  async function loadFacebookStatus() {
+    setFacebookStatusLoading(true);
+    try {
+      const response = await fetch("/api/facebook-status");
+      const data = (await response.json()) as {
+        items?: { destination_id: string; completed: boolean }[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load status.");
+      }
+      const nextMap = (data.items ?? []).reduce<Record<string, boolean>>((acc, item) => {
+        acc[item.destination_id] = item.completed;
+        return acc;
+      }, {});
+      setFacebookStatusMap(nextMap);
+      setFacebookStatusError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load status.";
+      setFacebookStatusError(message);
+    }
+    setFacebookStatusLoading(false);
+  }
+
   async function toggleStatus(destinationId: string) {
     const nextCompleted = !statusMap[destinationId];
     setStatusSaving((prev) => ({ ...prev, [destinationId]: true }));
@@ -98,6 +146,29 @@ export default function TasksPage() {
     }
   }
 
+  async function toggleFacebookStatus(destinationId: string) {
+    const nextCompleted = !facebookStatusMap[destinationId];
+    setFacebookStatusSaving((prev) => ({ ...prev, [destinationId]: true }));
+    setFacebookStatusMap((prev) => ({ ...prev, [destinationId]: nextCompleted }));
+    try {
+      const response = await fetch("/api/facebook-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destinationId, completed: nextCompleted }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to update status.");
+      }
+      setFacebookStatusError(null);
+    } catch (err) {
+      setFacebookStatusMap((prev) => ({ ...prev, [destinationId]: !nextCompleted }));
+      const message = err instanceof Error ? err.message : "Unable to update status.";
+      setFacebookStatusError(message);
+    } finally {
+      setFacebookStatusSaving((prev) => ({ ...prev, [destinationId]: false }));
+    }
+  }
   async function generateSuggestion(destination: PostingDestination) {
     if (!destination.prompt) return;
     if (promptLoading[destination.id] || promptResults[destination.id]) return;
@@ -164,6 +235,8 @@ export default function TasksPage() {
   useEffect(() => {
     void loadRedditDestinations();
     void loadStatus();
+    void loadFacebookDestinations();
+    void loadFacebookStatus();
   }, []);
 
   useEffect(() => {
@@ -380,32 +453,119 @@ export default function TasksPage() {
             )}
           </section>
 
-          <section className="grid gap-6 md:grid-cols-3">
-            {[
-              {
-                title: "Platform checklist",
-                copy: "Keep Reddit, YouTube, Facebook, and more in one view.",
-              },
-              {
-                title: "Quiz cadence",
-                copy: "Track which accounts still need quizzes or polls today.",
-              },
-              {
-                title: "Proof links",
-                copy: "Attach URLs or screenshots for verification and review.",
-              },
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="rounded-[28px] border-2 border-[var(--ink)] bg-white p-5 text-sm text-[var(--ink-soft)]"
-              >
-                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
-                  {item.title}
-                </div>
-                <p className="mt-3">{item.copy}</p>
+          <section className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+              Facebook group moderation
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                  {facebookDestinations.length} groups
+                </span>
+                <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-[var(--ink)]">
+                  {facebookDestinations.filter((item) => facebookStatusMap[item.id]).length} done
+                </span>
               </div>
-            ))}
+            </div>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
+              For each group: sort by newest, open the top 5 posts, and remove spam comments.
+            </p>
+            {facebookStatusLoading && (
+              <div className="mt-2 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                Syncing status...
+              </div>
+            )}
+            <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
+              {facebookLoading && (
+                <div className="rounded-2xl bg-[var(--paper)] p-4">Loading Facebook groups...</div>
+              )}
+              {!facebookLoading && facebookDestinations.length === 0 && (
+                <div className="rounded-2xl bg-[var(--paper)] p-4">
+                  No Facebook groups yet. Ask the admin to add destinations.
+                </div>
+              )}
+              {!facebookLoading &&
+                facebookDestinations.map((destination) => {
+                  const isDone = Boolean(facebookStatusMap[destination.id]);
+                  return (
+                    <div
+                      key={destination.id}
+                      className="rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[var(--ink)]">{destination.name}</div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
+                            Facebook
+                          </span>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] ${
+                              isDone
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {isDone ? "Done" : "Pending"}
+                          </span>
+                          <button
+                            className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                            type="button"
+                            disabled={facebookStatusSaving[destination.id]}
+                            onClick={() => void toggleFacebookStatus(destination.id)}
+                          >
+                            {facebookStatusSaving[destination.id]
+                              ? "Saving"
+                              : isDone
+                                ? "Mark not done"
+                                : "Mark done"}
+                          </button>
+                        </div>
+                      </div>
+                      {destination.url && (
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          <a
+                            className="text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)] hover:text-[var(--ink)]"
+                            href={destination.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {destination.url}
+                          </a>
+                          <a
+                            className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                            href={destination.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open
+                          </a>
+                        </div>
+                      )}
+                      <div className="mt-4 grid gap-2 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
+                        <span>Step 1: Sort posts by newest</span>
+                        <span>Step 2: Open the top 5 newest posts</span>
+                        <span>Step 3: Remove spam comments</span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+            {facebookError && (
+              <div className="mt-6 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                  Supabase notice
+                </div>
+                <p className="mt-2">{facebookError}</p>
+              </div>
+            )}
+            {facebookStatusError && (
+              <div className="mt-4 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                  Status notice
+                </div>
+                <p className="mt-2">{facebookStatusError}</p>
+              </div>
+            )}
           </section>
+
         </main>
       </div>
     </div>
