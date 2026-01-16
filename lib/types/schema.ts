@@ -9,6 +9,7 @@ export type PostingDestination = {
   platform: Platform;
   name: string;
   url: string | null;
+  prompt: string | null;
   created_at: string | null;
 };
 

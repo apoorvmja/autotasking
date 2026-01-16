@@ -36,9 +36,13 @@ export default function AdminPage() {
   const [platform, setPlatform] = useState<Platform>("Reddit");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [promptEdits, setPromptEdits] = useState<Record<string, string>>({});
+  const [promptSaving, setPromptSaving] = useState<Record<string, boolean>>({});
+  const [promptErrors, setPromptErrors] = useState<Record<string, string | null>>({});
 
   const stats = useMemo(() => {
     const lastAdded = destinations[0]?.created_at
@@ -58,7 +62,7 @@ export default function AdminPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("posting_destinations")
-      .select("id,platform,name,url,created_at")
+      .select("id,platform,name,url,prompt,created_at")
       .order("created_at", { ascending: false });
     if (error) {
       setError(error.message);
@@ -66,6 +70,12 @@ export default function AdminPage() {
     } else {
       setError(null);
       setDestinations(data ?? []);
+      const nextPrompts = (data ?? []).reduce<Record<string, string>>((acc, item) => {
+        acc[item.id] = item.prompt ?? "";
+        return acc;
+      }, {});
+      setPromptEdits(nextPrompts);
+      setPromptErrors({});
     }
     setLoading(false);
   }
@@ -75,7 +85,13 @@ export default function AdminPage() {
     const trimmedName = name.trim();
     if (!trimmedName) return;
     setSaving(true);
-    const payload = { platform, name: trimmedName, url: url.trim() || null };
+    const trimmedPrompt = platform === "Reddit" ? prompt.trim() : "";
+    const payload = {
+      platform,
+      name: trimmedName,
+      url: url.trim() || null,
+      prompt: trimmedPrompt ? trimmedPrompt : null,
+    };
     const { error } = await supabase.from("posting_destinations").insert(payload);
     if (error) {
       setError(error.message);
@@ -83,10 +99,27 @@ export default function AdminPage() {
       setPlatform("Reddit");
       setName("");
       setUrl("");
+      setPrompt("");
       setError(null);
       await loadDestinations();
     }
     setSaving(false);
+  }
+
+  async function handlePromptSave(id: string) {
+    const draft = (promptEdits[id] ?? "").trim();
+    setPromptSaving((prev) => ({ ...prev, [id]: true }));
+    const { error } = await supabase
+      .from("posting_destinations")
+      .update({ prompt: draft ? draft : null })
+      .eq("id", id);
+    if (error) {
+      setPromptErrors((prev) => ({ ...prev, [id]: error.message }));
+    } else {
+      setPromptErrors((prev) => ({ ...prev, [id]: null }));
+      await loadDestinations();
+    }
+    setPromptSaving((prev) => ({ ...prev, [id]: false }));
   }
 
   useEffect(() => {
@@ -197,6 +230,24 @@ export default function AdminPage() {
                     onChange={(event) => setUrl(event.target.value)}
                   />
                 </div>
+                {platform === "Reddit" && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                      LLM prompt (Reddit only)
+                    </label>
+                    <textarea
+                      className="min-h-[120px] w-full resize-none rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
+                      placeholder="Write a prompt that generates a Reddit post for {{group}}. Mention the main benefit and end with a question."
+                      value={prompt}
+                      onChange={(event) => setPrompt(event.target.value)}
+                    />
+                    <p className="text-xs text-[var(--ink-soft)]">
+                      Use <span className="font-semibold text-[var(--ink)]">{"{{group}}"}</span> and{" "}
+                      <span className="font-semibold text-[var(--ink)]">{"{{url}}"}</span> to insert the
+                      subreddit name or link.
+                    </p>
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     className="rounded-full bg-[var(--accent)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
@@ -223,7 +274,7 @@ export default function AdminPage() {
                   {missingTable && (
                     <div className="mt-4 rounded-xl bg-[var(--paper)] p-3 text-xs text-[var(--ink)]">
                       Create table: id uuid primary key default gen_random_uuid(), platform text not null,
-                      name text not null, url text, created_at timestamptz default now()
+                      name text not null, url text, prompt text, created_at timestamptz default now()
                     </div>
                   )}
                   {rlsBlocked && (
@@ -272,6 +323,40 @@ export default function AdminPage() {
                         >
                           {destination.url}
                         </a>
+                      )}
+                      {destination.platform === "Reddit" && (
+                        <div className="mt-4 space-y-3 rounded-2xl border border-[var(--ink)]/10 bg-white p-3">
+                          <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                            Reddit prompt
+                          </div>
+                          <textarea
+                            className="min-h-[110px] w-full resize-none rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
+                            placeholder="Add a prompt that generates a Reddit post for {{group}}."
+                            value={promptEdits[destination.id] ?? ""}
+                            onChange={(event) =>
+                              setPromptEdits((prev) => ({
+                                ...prev,
+                                [destination.id]: event.target.value,
+                              }))
+                            }
+                          />
+                          <div className="flex flex-wrap items-center gap-3">
+                            <button
+                              className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:bg-slate-300"
+                              type="button"
+                              disabled={promptSaving[destination.id]}
+                              onClick={() => void handlePromptSave(destination.id)}
+                            >
+                              {promptSaving[destination.id] ? "Saving" : "Save prompt"}
+                            </button>
+                            <span className="text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                              Supports {"{{group}}"} and {"{{url}}"}.
+                            </span>
+                          </div>
+                          {promptErrors[destination.id] && (
+                            <div className="text-xs text-red-600">{promptErrors[destination.id]}</div>
+                          )}
+                        </div>
                       )}
                       <div className="mt-2 text-xs uppercase tracking-[0.25em]">
                         Added {formatDate(destination.created_at)}

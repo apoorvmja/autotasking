@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase/client";
-import type { Task } from "@/lib/types/schema";
+import type { PostingDestination, Task } from "@/lib/types/schema";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -36,10 +36,18 @@ function formatDate(value: string | null) {
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [redditDestinations, setRedditDestinations] = useState<PostingDestination[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
+  const [redditLoading, setRedditLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [redditError, setRedditError] = useState<string | null>(null);
+  const [promptResults, setPromptResults] = useState<
+    Record<string, { title: string; description: string }>
+  >({});
+  const [promptLoading, setPromptLoading] = useState<Record<string, boolean>>({});
+  const [promptErrors, setPromptErrors] = useState<Record<string, string | null>>({});
 
   const stats = useMemo(() => {
     const lastUpdate = tasks[0]?.created_at ? formatDate(tasks[0].created_at) : "No updates yet";
@@ -54,18 +62,79 @@ export default function TasksPage() {
 
   async function loadTasks() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("id,title,created_at")
-      .order("created_at", { ascending: false });
-    if (error) {
-      setError(error.message);
-      setTasks([]);
-    } else {
+    try {
+      const response = await fetch("/api/daily-tasks", { method: "POST" });
+      const data = (await response.json()) as { tasks?: Task[]; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load tasks.");
+      }
+      setTasks(data.tasks ?? []);
       setError(null);
-      setTasks(data ?? []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load tasks.";
+      setError(message);
+      setTasks([]);
     }
     setLoading(false);
+  }
+
+  async function loadRedditDestinations() {
+    setRedditLoading(true);
+    const { data, error } = await supabase
+      .from("posting_destinations")
+      .select("id,platform,name,url,prompt,created_at")
+      .eq("platform", "Reddit")
+      .order("created_at", { ascending: false });
+    if (error) {
+      setRedditError(error.message);
+      setRedditDestinations([]);
+    } else {
+      setRedditError(null);
+      setRedditDestinations(data ?? []);
+    }
+    setRedditLoading(false);
+  }
+
+  async function generateSuggestion(destination: PostingDestination) {
+    if (!destination.prompt) return;
+    setPromptLoading((prev) => ({ ...prev, [destination.id]: true }));
+    setPromptErrors((prev) => ({ ...prev, [destination.id]: null }));
+    try {
+      const response = await fetch("/api/reddit-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: destination.prompt,
+          destination: {
+            name: destination.name,
+            url: destination.url,
+          },
+        }),
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        setPromptErrors((prev) => ({
+          ...prev,
+          [destination.id]: message || "Unable to generate a draft.",
+        }));
+      } else {
+        const data = (await response.json()) as { title: string; description: string };
+        setPromptResults((prev) => ({
+          ...prev,
+          [destination.id]: {
+            title: data.title,
+            description: data.description,
+          },
+        }));
+      }
+    } catch (err) {
+      setPromptErrors((prev) => ({
+        ...prev,
+        [destination.id]: "Network error while generating the draft.",
+      }));
+    } finally {
+      setPromptLoading((prev) => ({ ...prev, [destination.id]: false }));
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -86,6 +155,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     void loadTasks();
+    void loadRedditDestinations();
   }, []);
 
   return (
@@ -229,6 +299,118 @@ export default function TasksPage() {
                   ))}
               </div>
             </div>
+          </section>
+
+          <section className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+              Reddit post drafts
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                  {redditDestinations.length} groups
+                </span>
+                <button
+                  className="rounded-full border-2 border-[var(--ink)] px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)] transition hover:bg-[var(--ink)] hover:text-white"
+                  type="button"
+                  onClick={() => void loadRedditDestinations()}
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
+              Run the saved prompts for each subreddit to generate a ready-to-post title and
+              description.
+            </p>
+            <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
+              {redditLoading && (
+                <div className="rounded-2xl bg-[var(--paper)] p-4">Loading Reddit groups...</div>
+              )}
+              {!redditLoading && redditDestinations.length === 0 && (
+                <div className="rounded-2xl bg-[var(--paper)] p-4">
+                  No Reddit groups yet. Ask the admin to add destinations and prompts.
+                </div>
+              )}
+              {!redditLoading &&
+                redditDestinations.map((destination) => {
+                  const result = promptResults[destination.id];
+                  const hasPrompt = Boolean(destination.prompt?.trim());
+                  return (
+                    <div
+                      key={destination.id}
+                      className="rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[var(--ink)]">{destination.name}</div>
+                        <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
+                          Reddit
+                        </span>
+                      </div>
+                      {destination.url && (
+                        <a
+                          className="mt-2 block text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)] hover:text-[var(--ink)]"
+                          href={destination.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {destination.url}
+                        </a>
+                      )}
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button
+                          className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                          type="button"
+                          disabled={!hasPrompt || promptLoading[destination.id]}
+                          onClick={() => void generateSuggestion(destination)}
+                        >
+                          {promptLoading[destination.id]
+                            ? "Generating"
+                            : result
+                              ? "Regenerate draft"
+                              : "Generate draft"}
+                        </button>
+                        {!hasPrompt && (
+                          <span className="text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                            Prompt missing
+                          </span>
+                        )}
+                      </div>
+                      {promptErrors[destination.id] && (
+                        <div className="mt-3 text-xs text-red-600">
+                          {promptErrors[destination.id]}
+                        </div>
+                      )}
+                      {result ? (
+                        <div className="mt-4 grid gap-3 rounded-2xl border border-[var(--ink)]/10 bg-white p-4">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                              Suggested title
+                            </div>
+                            <div className="mt-2 text-[var(--ink)]">{result.title}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                              Suggested description
+                            </div>
+                            <p className="mt-2 text-[var(--ink)]">{result.description}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                          Run the prompt to get a draft for this subreddit.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+            {redditError && (
+              <div className="mt-6 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                  Supabase notice
+                </div>
+                <p className="mt-2">{redditError}</p>
+              </div>
+            )}
           </section>
 
           <section className="grid gap-6 md:grid-cols-3">

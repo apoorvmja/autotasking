@@ -20,6 +20,30 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Environment Variables
+
+Create a `.env.local` file with the following values:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+
+# Optional server-side key if you want to bypass RLS for server APIs
+SUPABASE_SERVICE_ROLE_KEY=...
+
+# LLM configuration (required for Reddit drafts + daily task generation)
+LLM_API_KEY=... # or OPENAI_API_KEY
+LLM_API_URL=https://api.openai.com/v1/chat/completions
+LLM_MODEL=gpt-4.1
+
+# Simple login credentials (defaults: intern / intern)
+APP_USERNAME=intern
+APP_PASSWORD=intern
+
+# Cookie token for auth (default: autotasking)
+AUTH_TOKEN=autotasking
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
