@@ -32,6 +32,17 @@
 - Daily tasks are generated and stored per intern.
 - Manual task creation uses a server API that attaches intern_id.
 
+## Feature: Reddit task completion
+
+### Completed
+- Intern can mark each subreddit as Done/Not done for today.
+- Completion is stored per intern per destination per IST day.
+
+### Code locations
+- Status API: `app/api/reddit-status/route.ts`
+- UI toggles: `app/tasks/page.tsx`
+- Supabase migration: `supabase/migrations/0010_reddit_task_status.sql`
+
 ### Code locations
 - Intern admin UI: `app/admin/page.tsx`
 - Login API: `app/api/login/route.ts`

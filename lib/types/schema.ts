@@ -21,3 +21,8 @@ export type Intern = {
   username: string;
   created_at: string | null;
 };
+
+export type RedditTaskStatus = {
+  destination_id: string;
+  completed: boolean;
+};

@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import type { PostingDestination, Task } from "@/lib/types/schema";
+import type { PostingDestination } from "@/lib/types/schema";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -16,67 +16,22 @@ const body = Manrope({
   weight: ["400", "500", "600"],
 });
 
-const focusTips = [
-  "Call out platforms: Reddit, YouTube, Facebook.",
-  "Note which accounts still need posts or quizzes.",
-  "Flag links or proofs that need review.",
-];
-
-function formatDate(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [redditDestinations, setRedditDestinations] = useState<PostingDestination[]>([]);
-  const [draft, setDraft] = useState("");
-  const [loading, setLoading] = useState(true);
   const [redditLoading, setRedditLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [redditError, setRedditError] = useState<string | null>(null);
   const [promptResults, setPromptResults] = useState<
     Record<string, { title: string; description: string }>
   >({});
   const [promptLoading, setPromptLoading] = useState<Record<string, boolean>>({});
   const [promptErrors, setPromptErrors] = useState<Record<string, string | null>>({});
-
-  const stats = useMemo(() => {
-    const lastUpdate = tasks[0]?.created_at ? formatDate(tasks[0].created_at) : "No updates yet";
-    return {
-      total: tasks.length,
-      lastUpdate,
-    };
-  }, [tasks]);
-
-  const missingTable = error?.toLowerCase().includes("does not exist");
-  const rlsBlocked = error?.toLowerCase().includes("row-level security");
-
-  async function loadTasks() {
-    setLoading(true);
-    try {
-      const response = await fetch("/api/daily-tasks", { method: "POST" });
-      const data = (await response.json()) as { tasks?: Task[]; error?: string };
-      if (!response.ok) {
-        throw new Error(data.error ?? "Unable to load tasks.");
-      }
-      setTasks(data.tasks ?? []);
-      setError(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to load tasks.";
-      setError(message);
-      setTasks([]);
-    }
-    setLoading(false);
-  }
+  const [copied, setCopied] = useState<Record<string, { title?: boolean; description?: boolean }>>(
+    {},
+  );
+  const [statusMap, setStatusMap] = useState<Record<string, boolean>>({});
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusSaving, setStatusSaving] = useState<Record<string, boolean>>({});
 
   async function loadRedditDestinations() {
     setRedditLoading(true);
@@ -93,6 +48,54 @@ export default function TasksPage() {
       setRedditDestinations(data ?? []);
     }
     setRedditLoading(false);
+  }
+
+  async function loadStatus() {
+    setStatusLoading(true);
+    try {
+      const response = await fetch("/api/reddit-status");
+      const data = (await response.json()) as {
+        items?: { destination_id: string; completed: boolean }[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load status.");
+      }
+      const nextMap = (data.items ?? []).reduce<Record<string, boolean>>((acc, item) => {
+        acc[item.destination_id] = item.completed;
+        return acc;
+      }, {});
+      setStatusMap(nextMap);
+      setStatusError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load status.";
+      setStatusError(message);
+    }
+    setStatusLoading(false);
+  }
+
+  async function toggleStatus(destinationId: string) {
+    const nextCompleted = !statusMap[destinationId];
+    setStatusSaving((prev) => ({ ...prev, [destinationId]: true }));
+    setStatusMap((prev) => ({ ...prev, [destinationId]: nextCompleted }));
+    try {
+      const response = await fetch("/api/reddit-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destinationId, completed: nextCompleted }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to update status.");
+      }
+      setStatusError(null);
+    } catch (err) {
+      setStatusMap((prev) => ({ ...prev, [destinationId]: !nextCompleted }));
+      const message = err instanceof Error ? err.message : "Unable to update status.";
+      setStatusError(message);
+    } finally {
+      setStatusSaving((prev) => ({ ...prev, [destinationId]: false }));
+    }
   }
 
   async function generateSuggestion(destination: PostingDestination) {
@@ -138,36 +141,29 @@ export default function TasksPage() {
     }
   }
 
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    setSaving(true);
+  async function handleCopy(id: string, value: string, field: "title" | "description") {
+    if (!value) return;
     try {
-      const response = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: trimmed }),
-      });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(data.error ?? "Unable to save task.");
-      }
-      setDraft("");
-      setError(null);
-      await loadTasks();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to save task.";
-      setError(message);
-    } finally {
-      setSaving(false);
+      await navigator.clipboard.writeText(value);
+      setCopied((prev) => ({
+        ...prev,
+        [id]: { ...(prev[id] ?? {}), [field]: true },
+      }));
+      window.setTimeout(() => {
+        setCopied((prev) => ({
+          ...prev,
+          [id]: { ...(prev[id] ?? {}), [field]: false },
+        }));
+      }, 1600);
+    } catch {
+      // ignore clipboard errors
     }
   }
 
+
   useEffect(() => {
-    void loadTasks();
     void loadRedditDestinations();
+    void loadStatus();
   }, []);
 
   useEffect(() => {
@@ -207,131 +203,34 @@ export default function TasksPage() {
                 Back to landing
               </Link>
               <h1 className={`mt-4 text-3xl font-semibold uppercase ${display.className}`}>
-                Daily tasks
+                Daily Reddit posts
               </h1>
               <p className="mt-2 max-w-xl text-base leading-7 text-[var(--ink-soft)]">
-                Review what needs to go live today, from posts to quizzes across every platform you
-                manage.
+                Auto-generated drafts for each subreddit. Use these to post today.
               </p>
-            </div>
-            <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
-              <div className="rounded-full border-2 border-[var(--ink)] bg-white px-3 py-1">
-                {stats.total} tasks
-              </div>
-              <div className="rounded-full border-2 border-[var(--ink)] bg-white px-3 py-1">
-                Last task: {stats.lastUpdate}
-              </div>
             </div>
           </header>
-
-          <section className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
-            <div className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
-                Daily checklist
-              </div>
-              <h2 className={`mt-4 text-2xl font-semibold uppercase ${display.className}`}>
-                What needs to go live?
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-[var(--ink-soft)]">
-                Add tasks tied to posting, quizzes, or scheduling across Reddit, YouTube, Facebook, and
-                other channels.
-              </p>
-              <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-                <textarea
-                  className="min-h-[120px] w-full resize-none rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
-                  placeholder="Post quiz to r/marketing, schedule YouTube short, share recap on Facebook."
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                />
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    className="rounded-full bg-[var(--accent)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
-                    type="submit"
-                    disabled={saving || !draft.trim()}
-                  >
-                    {saving ? "Saving" : "Add update"}
-                  </button>
-                  <button
-                    className="rounded-full border-2 border-[var(--ink)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)] transition hover:bg-[var(--ink)] hover:text-white"
-                    type="button"
-                    onClick={() => void loadTasks()}
-                  >
-                    Refresh
-                  </button>
-                </div>
-              </form>
-              <div className="mt-6 grid gap-3 rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--accent-soft)] p-4 text-sm text-[var(--ink-soft)]">
-                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
-                  Quick tips
-                </div>
-                {focusTips.map((tip) => (
-                  <div key={tip} className="flex items-start gap-2">
-                    <span className="mt-2 h-2 w-2 rounded-full bg-[var(--accent)]" />
-                    <span>{tip}</span>
-                  </div>
-                ))}
-              </div>
-              {error && (
-                <div className="mt-6 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
-                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
-                    Supabase notice
-                  </div>
-                  <p className="mt-2">{error}</p>
-                  {missingTable && (
-                    <div className="mt-4 rounded-xl bg-[var(--paper)] p-3 text-xs text-[var(--ink)]">
-                      Create table: id uuid primary key default gen_random_uuid(), title text not null,
-                      created_at timestamptz default now()
-                    </div>
-                  )}
-                  {rlsBlocked && (
-                    <p className="mt-2 text-xs">
-                      Enable select/insert policies for the tasks table to allow updates.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
-                Assigned tasks
-                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
-                  {tasks.length} total
-                </span>
-              </div>
-              <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
-                {loading && <div className="rounded-2xl bg-[var(--paper)] p-4">Loading updates...</div>}
-                {!loading && tasks.length === 0 && (
-                  <div className="rounded-2xl bg-[var(--paper)] p-4">
-                    No tasks yet. Add your first task to get started.
-                  </div>
-                )}
-                {!loading &&
-                  tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] p-4"
-                    >
-                      <div className="text-[var(--ink)]">{task.title}</div>
-                      <div className="mt-2 text-xs uppercase tracking-[0.25em]">
-                        {formatDate(task.created_at)}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </section>
 
           <section className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
               Reddit post drafts
-              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
-                {redditDestinations.length} groups
-              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                  {redditDestinations.length} groups
+                </span>
+                <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-[var(--ink)]">
+                  {redditDestinations.filter((item) => statusMap[item.id]).length} done
+                </span>
+              </div>
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
               Drafts generate automatically for each subreddit when you open this page.
             </p>
+            {statusLoading && (
+              <div className="mt-2 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                Syncing status...
+              </div>
+            )}
             <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
               {redditLoading && (
                 <div className="rounded-2xl bg-[var(--paper)] p-4">Loading Reddit groups...</div>
@@ -345,6 +244,7 @@ export default function TasksPage() {
                 redditDestinations.map((destination) => {
                   const result = promptResults[destination.id];
                   const hasPrompt = Boolean(destination.prompt?.trim());
+                  const isDone = Boolean(statusMap[destination.id]);
                   return (
                     <div
                       key={destination.id}
@@ -352,19 +252,52 @@ export default function TasksPage() {
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-[var(--ink)]">{destination.name}</div>
-                        <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
-                          Reddit
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
+                            Reddit
+                          </span>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] ${
+                              isDone
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {isDone ? "Done" : "Pending"}
+                          </span>
+                          <button
+                            className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                            type="button"
+                            disabled={statusSaving[destination.id]}
+                            onClick={() => void toggleStatus(destination.id)}
+                          >
+                            {statusSaving[destination.id]
+                              ? "Saving"
+                              : isDone
+                                ? "Mark not done"
+                                : "Mark done"}
+                          </button>
+                        </div>
                       </div>
                       {destination.url && (
-                        <a
-                          className="mt-2 block text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)] hover:text-[var(--ink)]"
-                          href={destination.url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {destination.url}
-                        </a>
+                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                          <a
+                            className="text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)] hover:text-[var(--ink)]"
+                            href={destination.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {destination.url}
+                          </a>
+                          <a
+                            className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                            href={destination.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open
+                          </a>
+                        </div>
                       )}
                       {!hasPrompt && (
                         <div className="mt-3 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
@@ -387,13 +320,33 @@ export default function TasksPage() {
                             <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
                               Suggested title
                             </div>
-                            <div className="mt-2 text-[var(--ink)]">{result.title}</div>
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-[var(--ink)]">
+                              <div>{result.title}</div>
+                              <button
+                                className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                                type="button"
+                                onClick={() => void handleCopy(destination.id, result.title, "title")}
+                              >
+                                {copied[destination.id]?.title ? "Copied" : "Copy title"}
+                              </button>
+                            </div>
                           </div>
                           <div>
                             <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
                               Suggested description
                             </div>
-                            <p className="mt-2 text-[var(--ink)]">{result.description}</p>
+                            <div className="mt-2 flex flex-col gap-3 text-[var(--ink)]">
+                              <p>{result.description}</p>
+                              <button
+                                className="w-fit rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                                type="button"
+                                onClick={() =>
+                                  void handleCopy(destination.id, result.description, "description")
+                                }
+                              >
+                                {copied[destination.id]?.description ? "Copied" : "Copy description"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -415,6 +368,14 @@ export default function TasksPage() {
                   Supabase notice
                 </div>
                 <p className="mt-2">{redditError}</p>
+              </div>
+            )}
+            {statusError && (
+              <div className="mt-4 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                  Status notice
+                </div>
+                <p className="mt-2">{statusError}</p>
               </div>
             )}
           </section>

@@ -45,12 +45,13 @@ Fields: username, password, created_at.
 - Admin can create intern usernames and passwords.
 
 ## 8. Intern Tasks Page (/tasks)
-- Shows today's tasks (most recent first).
-- Allows manual task entry (freeform text).
-- Reddit drafts are generated automatically and displayed (no button).
+- Shows Reddit drafts as the daily work list.
+- Drafts are generated automatically and displayed (no button).
+- Daily checklist + assigned tasks UI is removed.
+- Intern can mark each subreddit task as Done/Not done for today.
 
 ## 9. Daily Task Generation Rules (LLM)
-Deterministic, simple, and only triggered once per IST day.
+Deterministic, simple, and only triggered once per IST day. (Currently not shown in UI.)
 
 1. When an intern visits /tasks, the UI calls `POST /api/daily-tasks`.
 2. Server checks for tasks created today for that intern (IST date boundaries).
@@ -74,7 +75,7 @@ LLM formatting rules:
 - Starts with an action verb.
 - 8-14 words, plain text.
 
-### 10.2 Manual Task
+### 10.2 Manual Task (Not used in UI)
 - Non-empty task text.
 - Should include platform + destination name for clarity.
 - If an asset is missing, the task explicitly mentions it (e.g., "asset missing").
@@ -84,18 +85,19 @@ LLM formatting rules:
 - Prompt renders placeholders for `{{group}}` and optional `{{url}}`.
 - Response includes `title` and `description` only.
 
+### 10.4 Reddit Task Completion
+- Each subreddit can be marked Done or Not done for the current IST date.
+- Completion is stored per intern, per destination, per day.
+
 ## 11. Error & Edge Cases
-- **Missing prompt**: Draft button disabled and "Prompt missing" is shown.
-- **Empty task text**: Not saved.
-- **No tasks yet**: Show empty state message.
-- **No destinations**: Daily generation returns empty list.
+- **Missing prompt**: "Prompt missing" is shown for that subreddit.
+- **No destinations**: Draft section shows empty state.
 - **RLS blocks access**: Show Supabase error and guidance.
 - **LLM error**: Show error message; no data loss.
 - **Network error**: Show "Network error" message.
 - **Private group or missing URL**: Allowed; use name only.
-- **Duplicate tasks**: Allowed; no de-duplication.
-- **First visit today**: Generation happens once per IST day only.
-- **Unauthorized**: Redirect to /login or return 401 on API.
+- **Unauthorized (intern)**: Redirect to /login or return 401 on API.
+- **Unauthorized (admin)**: Basic auth challenge on /admin.
 
 ## 12. Data Model (Supabase)
 ### 12.1 Table: `posting_destinations`
@@ -151,23 +153,39 @@ RLS policies (minimum required):
 - Response: `{ title, description }`
 - Errors: `400` missing fields, `500` LLM failure, `401` if unauthorized
 
+### 13.7 Reddit Status
+- `GET /api/reddit-status`
+- Response: `{ items: [{ destination_id, completed }] }`
+- `POST /api/reddit-status`
+- Body: `{ destinationId, completed }`
+- Response: `{ ok: true, completed }`
+
 ## 14. Success Criteria
-- Intern sees a daily list without asking for instructions.
+- Intern sees Reddit drafts without asking for instructions.
 - Admin can update destinations/prompts without developer help.
-- Daily list generates once per day and is stable thereafter.
+- Drafts generate automatically on page load.
 - Reddit drafts are consistent and usable with minimal edits.
 
 ## 15. Implementation Status (as of 2026-01-16)
 - [x] Admin destination management
 - [x] Reddit prompt storage + draft generation UI (auto-run)
-- [x] Intern task list + manual task entry
-- [x] Daily LLM task generation on first visit (UTC day)
+- [x] Reddit drafts as the daily work list
+- [ ] Daily task list UI (removed)
 - [x] Admin-managed intern logins
 - [x] Supabase schema + policies for tasks/destinations
-- [ ] Task completion tracking (explicitly out of scope)
+- [x] Reddit task completion tracking (per day)
 - [ ] Auto-posting/scheduling (future)
 ### 12.3 Table: `interns`
 - `id` uuid primary key
 - `username` text (unique)
 - `password` text
+- `created_at` timestamptz default now()
+
+### 12.4 Table: `reddit_task_status`
+- `id` uuid primary key
+- `intern_id` uuid references interns(id)
+- `destination_id` uuid references posting_destinations(id)
+- `task_date` date (IST day)
+- `completed` boolean
+- `completed_at` timestamptz nullable
 - `created_at` timestamptz default now()

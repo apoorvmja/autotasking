@@ -54,6 +54,7 @@ export const config = {
     "/admin/:path*",
     "/api/daily-tasks",
     "/api/reddit-prompt",
+    "/api/reddit-status",
     "/api/interns",
     "/api/tasks",
   ],
