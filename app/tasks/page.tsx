@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import type { PostingDestination } from "@/lib/types/schema";
+import type { PostingDestination, YoutubeVideo } from "@/lib/types/schema";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -19,6 +19,7 @@ const body = Manrope({
 export default function TasksPage() {
   const [redditDestinations, setRedditDestinations] = useState<PostingDestination[]>([]);
   const [facebookDestinations, setFacebookDestinations] = useState<PostingDestination[]>([]);
+  const [youtubeDestinations, setYoutubeDestinations] = useState<PostingDestination[]>([]);
   const [redditLoading, setRedditLoading] = useState(true);
   const [facebookLoading, setFacebookLoading] = useState(true);
   const [redditError, setRedditError] = useState<string | null>(null);
@@ -39,6 +40,9 @@ export default function TasksPage() {
   const [facebookStatusLoading, setFacebookStatusLoading] = useState(true);
   const [facebookStatusError, setFacebookStatusError] = useState<string | null>(null);
   const [facebookStatusSaving, setFacebookStatusSaving] = useState<Record<string, boolean>>({});
+  const [youtubeVideos, setYoutubeVideos] = useState<YoutubeVideo[]>([]);
+  const [youtubeLoading, setYoutubeLoading] = useState(true);
+  const [youtubeError, setYoutubeError] = useState<string | null>(null);
 
   async function loadRedditDestinations() {
     setRedditLoading(true);
@@ -72,6 +76,19 @@ export default function TasksPage() {
       setFacebookDestinations(data ?? []);
     }
     setFacebookLoading(false);
+  }
+
+  async function loadYoutubeDestinations() {
+    const { data, error } = await supabase
+      .from("posting_destinations")
+      .select("id,platform,name,url,prompt,created_at")
+      .eq("platform", "YouTube")
+      .order("created_at", { ascending: false });
+    if (error) {
+      setYoutubeDestinations([]);
+    } else {
+      setYoutubeDestinations(data ?? []);
+    }
   }
 
   async function loadStatus() {
@@ -120,6 +137,24 @@ export default function TasksPage() {
       setFacebookStatusError(message);
     }
     setFacebookStatusLoading(false);
+  }
+
+  async function loadYoutubeVideos() {
+    setYoutubeLoading(true);
+    try {
+      const response = await fetch("/api/youtube-videos");
+      const data = (await response.json()) as { videos?: YoutubeVideo[]; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load videos.");
+      }
+      setYoutubeVideos(data.videos ?? []);
+      setYoutubeError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load videos.";
+      setYoutubeError(message);
+      setYoutubeVideos([]);
+    }
+    setYoutubeLoading(false);
   }
 
   async function toggleStatus(destinationId: string) {
@@ -237,6 +272,8 @@ export default function TasksPage() {
     void loadStatus();
     void loadFacebookDestinations();
     void loadFacebookStatus();
+    void loadYoutubeDestinations();
+    void loadYoutubeVideos();
   }, []);
 
   useEffect(() => {
@@ -276,10 +313,10 @@ export default function TasksPage() {
                 Back to landing
               </Link>
               <h1 className={`mt-4 text-3xl font-semibold uppercase ${display.className}`}>
-                Daily Reddit posts
+                Daily workflow
               </h1>
               <p className="mt-2 max-w-xl text-base leading-7 text-[var(--ink-soft)]">
-                Auto-generated drafts for each subreddit. Use these to post today.
+                Reddit drafts, Facebook moderation steps, and YouTube uploads in one place.
               </p>
             </div>
           </header>
@@ -449,6 +486,85 @@ export default function TasksPage() {
                   Status notice
                 </div>
                 <p className="mt-2">{statusError}</p>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+              YouTube uploads
+              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                {youtubeVideos.length} videos
+              </span>
+            </div>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
+              Download the assigned video and upload it to the correct YouTube channel.
+            </p>
+            <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
+              {youtubeLoading && (
+                <div className="rounded-2xl bg-[var(--paper)] p-4">Loading videos...</div>
+              )}
+              {!youtubeLoading && youtubeVideos.length === 0 && (
+                <div className="rounded-2xl bg-[var(--paper)] p-4">
+                  No videos available yet. Check back after the admin uploads today’s files.
+                </div>
+              )}
+              {!youtubeLoading &&
+                youtubeVideos.map((video) => {
+                  const destination = [...youtubeDestinations].find(
+                    (item) => item.id === video.destination_id,
+                  );
+                  return (
+                    <div
+                      key={video.id}
+                      className="rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[var(--ink)]">{video.title}</div>
+                        <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
+                          YouTube
+                        </span>
+                      </div>
+                      <div className="mt-2 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                        {destination?.name ?? "YouTube channel"}
+                      </div>
+                      <p className="mt-3 text-sm text-[var(--ink-soft)]">{video.description}</p>
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        {destination?.url && (
+                          <a
+                            className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                            href={destination.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open channel
+                          </a>
+                        )}
+                        {video.download_url ? (
+                          <a
+                            className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-orange-600"
+                            href={video.download_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Download video
+                          </a>
+                        ) : (
+                          <span className="text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                            Download link unavailable
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+            {youtubeError && (
+              <div className="mt-6 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                  YouTube notice
+                </div>
+                <p className="mt-2">{youtubeError}</p>
               </div>
             )}
           </section>

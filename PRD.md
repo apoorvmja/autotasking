@@ -43,6 +43,7 @@ Fields: username, password, created_at.
 - Reddit destinations include a prompt with placeholders: `{{group}}` and `{{url}}`.
 - Admin can edit and save Reddit prompts for each destination.
 - Admin can create intern usernames and passwords.
+- Admin can upload daily YouTube videos with title + description.
 
 ## 8. Intern Tasks Page (/tasks)
 - Shows Reddit drafts as the daily work list.
@@ -50,6 +51,7 @@ Fields: username, password, created_at.
 - Daily checklist + assigned tasks UI is removed.
 - Intern can mark each subreddit task as Done/Not done for today.
 - Facebook moderation tasks are listed with the same Done/Not done tracking.
+- YouTube uploads are listed with a download button and channel link.
 
 ## 9. Daily Task Generation Rules (LLM)
 Deterministic, simple, and only triggered once per IST day. (Currently not shown in UI.)
@@ -93,6 +95,10 @@ LLM formatting rules:
 ### 10.5 Facebook Moderation Task
 - Intern opens group, sorts by newest, reviews top 5 posts, removes spam comments.
 - Each group can be marked Done/Not done for the current IST date.
+
+### 10.6 YouTube Upload Task
+- Admin uploads a video with title + description for a specific channel.
+- Intern downloads the video and uploads it to the channel with the provided title/description.
 
 ## 11. Error & Edge Cases
 - **Missing prompt**: "Prompt missing" is shown for that subreddit.
@@ -172,9 +178,17 @@ RLS policies (minimum required):
 - Body: `{ destinationId, completed }`
 - Response: `{ ok: true, completed }`
 
+### 13.9 YouTube Videos
+- `GET /api/youtube-videos`
+- Response: `{ videos: [{ id, destination_id, title, description, download_url }] }`
+- `POST /api/youtube-videos` (multipart)
+- Body: `destinationId`, `title`, `description`, `file`
+- `DELETE /api/youtube-videos?id=...`
+
 ## 14. Success Criteria
 - Intern sees Reddit drafts without asking for instructions.
 - Intern sees Facebook moderation tasks without asking for instructions.
+- Intern can download YouTube videos and upload them to the right channel.
 - Admin can update destinations/prompts without developer help.
 - Drafts generate automatically on page load.
 - Reddit drafts are consistent and usable with minimal edits.
@@ -188,6 +202,7 @@ RLS policies (minimum required):
 - [x] Supabase schema + policies for tasks/destinations
 - [x] Reddit task completion tracking (per day)
 - [x] Facebook moderation tracking (per day)
+- [x] YouTube video uploads for interns
 - [ ] Auto-posting/scheduling (future)
 ### 12.3 Table: `interns`
 - `id` uuid primary key
@@ -211,4 +226,12 @@ RLS policies (minimum required):
 - `task_date` date (IST day)
 - `completed` boolean
 - `completed_at` timestamptz nullable
+- `created_at` timestamptz default now()
+
+### 12.6 Table: `youtube_videos`
+- `id` uuid primary key
+- `destination_id` uuid references posting_destinations(id)
+- `title` text
+- `description` text
+- `file_path` text
 - `created_at` timestamptz default now()

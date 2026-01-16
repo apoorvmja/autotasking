@@ -19,11 +19,13 @@ function isAdminBasicAuthValid(header: string | null) {
 
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const hasAdminAuth = isAdminBasicAuthValid(request.headers.get("authorization"));
+  if (hasAdminAuth) {
+    return NextResponse.next();
+  }
+
   const isAdminRoute = path.startsWith("/admin") || path.startsWith("/api/interns");
   if (isAdminRoute) {
-    if (isAdminBasicAuthValid(request.headers.get("authorization"))) {
-      return NextResponse.next();
-    }
     if (path.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -56,6 +58,7 @@ export const config = {
     "/api/reddit-prompt",
     "/api/reddit-status",
     "/api/facebook-status",
+    "/api/youtube-videos",
     "/api/interns",
     "/api/tasks",
   ],

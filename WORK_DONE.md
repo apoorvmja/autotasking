@@ -54,6 +54,19 @@
 - UI section: `app/tasks/page.tsx`
 - Supabase migration: `supabase/migrations/0011_facebook_task_status.sql`
 
+## Feature: YouTube uploads
+
+### Completed
+- Admin can upload YouTube videos with title/description tied to a channel.
+- Admin can delete videos and upload new ones daily.
+- Interns can download videos and see the target channel.
+
+### Code locations
+- Admin uploads UI: `app/admin/page.tsx`
+- Videos API: `app/api/youtube-videos/route.ts`
+- Intern view: `app/tasks/page.tsx`
+- Supabase migration: `supabase/migrations/0012_youtube_videos.sql`
+
 ### Code locations
 - Intern admin UI: `app/admin/page.tsx`
 - Login API: `app/api/login/route.ts`

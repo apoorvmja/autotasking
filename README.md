@@ -38,6 +38,10 @@ LLM_MODEL=gpt-4.1
 
 # Intern credentials are managed in /admin and stored in Supabase
 
+## Supabase Storage
+
+Create a storage bucket named `youtube-video-storage-bucket` for uploaded YouTube files.
+
 ## Admin Access
 
 The /admin route uses HTTP Basic Auth with username `admin` and password `admin`.

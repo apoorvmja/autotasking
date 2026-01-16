@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase/client";
-import type { Intern, Platform, PostingDestination } from "@/lib/types/schema";
+import type { Intern, Platform, PostingDestination, YoutubeVideo } from "@/lib/types/schema";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -49,6 +49,14 @@ export default function AdminPage() {
   const [promptEdits, setPromptEdits] = useState<Record<string, string>>({});
   const [promptSaving, setPromptSaving] = useState<Record<string, boolean>>({});
   const [promptErrors, setPromptErrors] = useState<Record<string, string | null>>({});
+  const [youtubeVideos, setYoutubeVideos] = useState<YoutubeVideo[]>([]);
+  const [youtubeLoading, setYoutubeLoading] = useState(true);
+  const [youtubeSaving, setYoutubeSaving] = useState(false);
+  const [youtubeError, setYoutubeError] = useState<string | null>(null);
+  const [youtubeDestinationId, setYoutubeDestinationId] = useState("");
+  const [youtubeTitle, setYoutubeTitle] = useState("");
+  const [youtubeDescription, setYoutubeDescription] = useState("");
+  const [youtubeFile, setYoutubeFile] = useState<File | null>(null);
 
   const stats = useMemo(() => {
     const lastAdded = destinations[0]?.created_at
@@ -174,9 +182,79 @@ export default function AdminPage() {
     setPromptSaving((prev) => ({ ...prev, [id]: false }));
   }
 
+  async function loadYoutubeVideos() {
+    setYoutubeLoading(true);
+    try {
+      const response = await fetch("/api/youtube-videos");
+      const data = (await response.json()) as { videos?: YoutubeVideo[]; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load videos.");
+      }
+      setYoutubeVideos(data.videos ?? []);
+      setYoutubeError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load videos.";
+      setYoutubeError(message);
+      setYoutubeVideos([]);
+    }
+    setYoutubeLoading(false);
+  }
+
+  async function handleYoutubeSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!youtubeDestinationId || !youtubeTitle.trim() || !youtubeDescription.trim() || !youtubeFile) {
+      return;
+    }
+    setYoutubeSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append("destinationId", youtubeDestinationId);
+      formData.append("title", youtubeTitle.trim());
+      formData.append("description", youtubeDescription.trim());
+      formData.append("file", youtubeFile);
+      const response = await fetch("/api/youtube-videos", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to upload video.");
+      }
+      setYoutubeTitle("");
+      setYoutubeDescription("");
+      setYoutubeFile(null);
+      setYoutubeError(null);
+      await loadYoutubeVideos();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to upload video.";
+      setYoutubeError(message);
+    } finally {
+      setYoutubeSaving(false);
+    }
+  }
+
+  async function handleYoutubeDelete(id: string) {
+    setYoutubeSaving(true);
+    try {
+      const response = await fetch(`/api/youtube-videos?id=${id}`, { method: "DELETE" });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to delete video.");
+      }
+      setYoutubeError(null);
+      await loadYoutubeVideos();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to delete video.";
+      setYoutubeError(message);
+    } finally {
+      setYoutubeSaving(false);
+    }
+  }
+
   useEffect(() => {
     void loadDestinations();
     void loadInterns();
+    void loadYoutubeVideos();
   }, []);
 
   return (
@@ -505,6 +583,145 @@ export default function AdminPage() {
                       <div className="text-[var(--ink)]">{intern.username}</div>
                       <div className="mt-2 text-xs uppercase tracking-[0.25em]">
                         Added {formatDate(intern.created_at)}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
+            <div className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                YouTube uploads
+              </div>
+              <h2 className={`mt-4 text-2xl font-semibold uppercase ${display.className}`}>
+                Upload daily videos
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-[var(--ink-soft)]">
+                Add a video, title, and description for interns to upload to YouTube.
+              </p>
+              <form className="mt-6 space-y-4" onSubmit={handleYoutubeSubmit}>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                    YouTube channel
+                  </label>
+                  <select
+                    className="w-full rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
+                    value={youtubeDestinationId}
+                    onChange={(event) => setYoutubeDestinationId(event.target.value)}
+                  >
+                    <option value="">Select a channel</option>
+                    {destinations
+                      .filter((destination) => destination.platform === "YouTube")
+                      .map((destination) => (
+                        <option key={destination.id} value={destination.id}>
+                          {destination.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                    Video title
+                  </label>
+                  <input
+                    className="w-full rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
+                    value={youtubeTitle}
+                    onChange={(event) => setYoutubeTitle(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                    Video description
+                  </label>
+                  <textarea
+                    className="min-h-[120px] w-full resize-none rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
+                    value={youtubeDescription}
+                    onChange={(event) => setYoutubeDescription(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                    Video file
+                  </label>
+                  <input
+                    className="w-full rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
+                    type="file"
+                    accept="video/*"
+                    onChange={(event) => setYoutubeFile(event.target.files?.[0] ?? null)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    className="rounded-full bg-[var(--accent)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                    type="submit"
+                    disabled={
+                      youtubeSaving ||
+                      !youtubeDestinationId ||
+                      !youtubeTitle.trim() ||
+                      !youtubeDescription.trim() ||
+                      !youtubeFile
+                    }
+                  >
+                    {youtubeSaving ? "Uploading" : "Upload video"}
+                  </button>
+                  <button
+                    className="rounded-full border-2 border-[var(--ink)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)] transition hover:bg-[var(--ink)] hover:text-white"
+                    type="button"
+                    onClick={() => void loadYoutubeVideos()}
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </form>
+              {youtubeError && (
+                <div className="mt-6 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                    YouTube notice
+                  </div>
+                  <p className="mt-2">{youtubeError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
+              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                Uploaded videos
+                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                  {youtubeVideos.length} total
+                </span>
+              </div>
+              <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
+                {youtubeLoading && (
+                  <div className="rounded-2xl bg-[var(--paper)] p-4">Loading videos...</div>
+                )}
+                {!youtubeLoading && youtubeVideos.length === 0 && (
+                  <div className="rounded-2xl bg-[var(--paper)] p-4">
+                    No videos yet. Upload the first video to get started.
+                  </div>
+                )}
+                {!youtubeLoading &&
+                  youtubeVideos.map((video) => (
+                    <div
+                      key={video.id}
+                      className="rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] p-4"
+                    >
+                      <div className="text-[var(--ink)]">{video.title}</div>
+                      <div className="mt-2 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                        {destinations.find((item) => item.id === video.destination_id)?.name ??
+                          "YouTube channel"}
+                      </div>
+                      <p className="mt-2 text-sm text-[var(--ink-soft)]">{video.description}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button
+                          className="rounded-full border border-[var(--ink)]/20 bg-white px-4 py-2 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          disabled={youtubeSaving}
+                          onClick={() => void handleYoutubeDelete(video.id)}
+                        >
+                          {youtubeSaving ? "Working" : "Delete"}
+                        </button>
                       </div>
                     </div>
                   ))}

@@ -26,3 +26,13 @@ export type RedditTaskStatus = {
   destination_id: string;
   completed: boolean;
 };
+
+export type YoutubeVideo = {
+  id: string;
+  destination_id: string;
+  title: string;
+  description: string;
+  file_path: string;
+  created_at: string | null;
+  download_url?: string | null;
+};
