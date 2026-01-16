@@ -57,6 +57,19 @@ export default function AdminPage() {
   const [youtubeTitle, setYoutubeTitle] = useState("");
   const [youtubeDescription, setYoutubeDescription] = useState("");
   const [youtubeFile, setYoutubeFile] = useState<File | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryDate, setSummaryDate] = useState<string | null>(null);
+  const [summaryRows, setSummaryRows] = useState<
+    Array<{
+      id: string;
+      username: string;
+      reddit: { done: number; total: number; pending: number };
+      facebook: { done: number; total: number; pending: number };
+      youtube: { done: number; total: number; pending: number };
+      overall: { done: number; total: number; pending: number };
+    }>
+  >([]);
 
   const stats = useMemo(() => {
     const lastAdded = destinations[0]?.created_at
@@ -251,10 +264,41 @@ export default function AdminPage() {
     }
   }
 
+  async function loadSummary() {
+    setSummaryLoading(true);
+    try {
+      const response = await fetch("/api/admin-summary");
+      const data = (await response.json()) as {
+        date?: string;
+        interns?: Array<{
+          id: string;
+          username: string;
+          reddit: { done: number; total: number; pending: number };
+          facebook: { done: number; total: number; pending: number };
+          youtube: { done: number; total: number; pending: number };
+          overall: { done: number; total: number; pending: number };
+        }>;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load summary.");
+      }
+      setSummaryRows(data.interns ?? []);
+      setSummaryDate(data.date ?? null);
+      setSummaryError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load summary.";
+      setSummaryError(message);
+      setSummaryRows([]);
+    }
+    setSummaryLoading(false);
+  }
+
   useEffect(() => {
     void loadDestinations();
     void loadInterns();
     void loadYoutubeVideos();
+    void loadSummary();
   }, []);
 
   return (
@@ -727,6 +771,81 @@ export default function AdminPage() {
                   ))}
               </div>
             </div>
+          </section>
+
+          <section className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+              Daily intern progress
+              <div className="flex flex-wrap items-center gap-3">
+                {summaryDate && (
+                  <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                    IST {summaryDate}
+                  </span>
+                )}
+                <button
+                  className="rounded-full border-2 border-[var(--ink)] px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)] transition hover:bg-[var(--ink)] hover:text-white"
+                  type="button"
+                  onClick={() => void loadSummary()}
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
+              Track what each intern has completed today across Reddit, Facebook, and YouTube.
+            </p>
+            <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
+              {summaryLoading && (
+                <div className="rounded-2xl bg-[var(--paper)] p-4">Loading progress...</div>
+              )}
+              {!summaryLoading && summaryRows.length === 0 && (
+                <div className="rounded-2xl bg-[var(--paper)] p-4">No interns yet.</div>
+              )}
+              {!summaryLoading &&
+                summaryRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-[var(--ink)]">{row.username}</div>
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs uppercase tracking-[0.2em] text-emerald-800">
+                        {row.overall.done}/{row.overall.total} done
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      {[
+                        { label: "Reddit", stats: row.reddit },
+                        { label: "Facebook", stats: row.facebook },
+                        { label: "YouTube", stats: row.youtube },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className="rounded-2xl border border-[var(--ink)]/10 bg-white p-3"
+                        >
+                          <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                            {item.label}
+                          </div>
+                          <div className="mt-2 text-sm text-[var(--ink)]">
+                            Done {item.stats.done} / {item.stats.total}
+                          </div>
+                          <div className="mt-1 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                            Pending {item.stats.pending}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+            {summaryError && (
+              <div className="mt-6 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                  Summary notice
+                </div>
+                <p className="mt-2">{summaryError}</p>
+              </div>
+            )}
           </section>
 
           <section className="grid gap-6 md:grid-cols-3">

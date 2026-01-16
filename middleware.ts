@@ -24,7 +24,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const isAdminRoute = path.startsWith("/admin") || path.startsWith("/api/interns");
+  const isAdminRoute =
+    path.startsWith("/admin") || path.startsWith("/api/interns") || path.startsWith("/api/admin-summary");
   if (isAdminRoute) {
     if (path.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -58,8 +59,10 @@ export const config = {
     "/api/reddit-prompt",
     "/api/reddit-status",
     "/api/facebook-status",
+    "/api/youtube-status",
     "/api/youtube-videos",
     "/api/interns",
     "/api/tasks",
+    "/api/admin-summary",
   ],
 };

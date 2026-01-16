@@ -67,6 +67,25 @@
 - Intern view: `app/tasks/page.tsx`
 - Supabase migration: `supabase/migrations/0012_youtube_videos.sql`
 
+## Feature: YouTube upload completion
+
+### Completed
+- Intern can mark each YouTube video upload as Done/Not done per IST day.
+
+### Code locations
+- Status API: `app/api/youtube-status/route.ts`
+- UI toggles: `app/tasks/page.tsx`
+- Supabase migration: `supabase/migrations/0014_youtube_task_status.sql`
+
+## Feature: Admin daily summary
+
+### Completed
+- Admin can see per-intern done/pending counts for Reddit, Facebook, YouTube.
+
+### Code locations
+- Summary API: `app/api/admin-summary/route.ts`
+- Admin UI: `app/admin/page.tsx`
+
 ### Code locations
 - Intern admin UI: `app/admin/page.tsx`
 - Login API: `app/api/login/route.ts`

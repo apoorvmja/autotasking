@@ -36,3 +36,8 @@ export type YoutubeVideo = {
   created_at: string | null;
   download_url?: string | null;
 };
+
+export type YoutubeTaskStatus = {
+  video_id: string;
+  completed: boolean;
+};

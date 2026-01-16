@@ -43,6 +43,10 @@ export default function TasksPage() {
   const [youtubeVideos, setYoutubeVideos] = useState<YoutubeVideo[]>([]);
   const [youtubeLoading, setYoutubeLoading] = useState(true);
   const [youtubeError, setYoutubeError] = useState<string | null>(null);
+  const [youtubeStatusMap, setYoutubeStatusMap] = useState<Record<string, boolean>>({});
+  const [youtubeStatusLoading, setYoutubeStatusLoading] = useState(true);
+  const [youtubeStatusError, setYoutubeStatusError] = useState<string | null>(null);
+  const [youtubeStatusSaving, setYoutubeStatusSaving] = useState<Record<string, boolean>>({});
 
   async function loadRedditDestinations() {
     setRedditLoading(true);
@@ -155,6 +159,54 @@ export default function TasksPage() {
       setYoutubeVideos([]);
     }
     setYoutubeLoading(false);
+  }
+
+  async function loadYoutubeStatus() {
+    setYoutubeStatusLoading(true);
+    try {
+      const response = await fetch("/api/youtube-status");
+      const data = (await response.json()) as {
+        items?: { video_id: string; completed: boolean }[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load status.");
+      }
+      const nextMap = (data.items ?? []).reduce<Record<string, boolean>>((acc, item) => {
+        acc[item.video_id] = item.completed;
+        return acc;
+      }, {});
+      setYoutubeStatusMap(nextMap);
+      setYoutubeStatusError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load status.";
+      setYoutubeStatusError(message);
+    }
+    setYoutubeStatusLoading(false);
+  }
+
+  async function toggleYoutubeStatus(videoId: string) {
+    const nextCompleted = !youtubeStatusMap[videoId];
+    setYoutubeStatusSaving((prev) => ({ ...prev, [videoId]: true }));
+    setYoutubeStatusMap((prev) => ({ ...prev, [videoId]: nextCompleted }));
+    try {
+      const response = await fetch("/api/youtube-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId, completed: nextCompleted }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to update status.");
+      }
+      setYoutubeStatusError(null);
+    } catch (err) {
+      setYoutubeStatusMap((prev) => ({ ...prev, [videoId]: !nextCompleted }));
+      const message = err instanceof Error ? err.message : "Unable to update status.";
+      setYoutubeStatusError(message);
+    } finally {
+      setYoutubeStatusSaving((prev) => ({ ...prev, [videoId]: false }));
+    }
   }
 
   async function toggleStatus(destinationId: string) {
@@ -274,6 +326,7 @@ export default function TasksPage() {
     void loadFacebookStatus();
     void loadYoutubeDestinations();
     void loadYoutubeVideos();
+    void loadYoutubeStatus();
   }, []);
 
   useEffect(() => {
@@ -493,13 +546,23 @@ export default function TasksPage() {
           <section className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
               YouTube uploads
-              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
-                {youtubeVideos.length} videos
-              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                  {youtubeVideos.length} videos
+                </span>
+                <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-[var(--ink)]">
+                  {youtubeVideos.filter((video) => youtubeStatusMap[video.id]).length} done
+                </span>
+              </div>
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
               Download the assigned video and upload it to the correct YouTube channel.
             </p>
+            {youtubeStatusLoading && (
+              <div className="mt-2 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                Syncing status...
+              </div>
+            )}
             <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
               {youtubeLoading && (
                 <div className="rounded-2xl bg-[var(--paper)] p-4">Loading videos...</div>
@@ -514,6 +577,7 @@ export default function TasksPage() {
                   const destination = [...youtubeDestinations].find(
                     (item) => item.id === video.destination_id,
                   );
+                  const isDone = Boolean(youtubeStatusMap[video.id]);
                   return (
                     <div
                       key={video.id}
@@ -521,14 +585,53 @@ export default function TasksPage() {
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-[var(--ink)]">{video.title}</div>
-                        <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
-                          YouTube
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)]">
+                            YouTube
+                          </span>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] ${
+                              isDone
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {isDone ? "Done" : "Pending"}
+                          </span>
+                          <button
+                            className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                            type="button"
+                            disabled={youtubeStatusSaving[video.id]}
+                            onClick={() => void toggleYoutubeStatus(video.id)}
+                          >
+                            {youtubeStatusSaving[video.id]
+                              ? "Saving"
+                              : isDone
+                                ? "Mark not done"
+                                : "Mark done"}
+                          </button>
+                          <button
+                            className="rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                            type="button"
+                            onClick={() => void handleCopy(video.id, video.title, "title")}
+                          >
+                            {copied[video.id]?.title ? "Copied" : "Copy title"}
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-2 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
                         {destination?.name ?? "YouTube channel"}
                       </div>
-                      <p className="mt-3 text-sm text-[var(--ink-soft)]">{video.description}</p>
+                      <div className="mt-3 flex flex-col gap-3 text-[var(--ink)]">
+                        <p className="text-sm text-[var(--ink-soft)]">{video.description}</p>
+                        <button
+                          className="w-fit rounded-full border border-[var(--ink)]/20 bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-[var(--ink-soft)] transition hover:border-[var(--ink)] hover:text-[var(--ink)]"
+                          type="button"
+                          onClick={() => void handleCopy(video.id, video.description, "description")}
+                        >
+                          {copied[video.id]?.description ? "Copied" : "Copy description"}
+                        </button>
+                      </div>
                       <div className="mt-4 flex flex-wrap items-center gap-3">
                         {destination?.url && (
                           <a
@@ -565,6 +668,14 @@ export default function TasksPage() {
                   YouTube notice
                 </div>
                 <p className="mt-2">{youtubeError}</p>
+              </div>
+            )}
+            {youtubeStatusError && (
+              <div className="mt-4 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                  Status notice
+                </div>
+                <p className="mt-2">{youtubeStatusError}</p>
               </div>
             )}
           </section>

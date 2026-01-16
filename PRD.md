@@ -44,6 +44,7 @@ Fields: username, password, created_at.
 - Admin can edit and save Reddit prompts for each destination.
 - Admin can create intern usernames and passwords.
 - Admin can upload daily YouTube videos with title + description.
+- Admin can view daily per-intern progress (done/pending totals).
 
 ## 8. Intern Tasks Page (/tasks)
 - Shows Reddit drafts as the daily work list.
@@ -52,6 +53,7 @@ Fields: username, password, created_at.
 - Intern can mark each subreddit task as Done/Not done for today.
 - Facebook moderation tasks are listed with the same Done/Not done tracking.
 - YouTube uploads are listed with a download button and channel link.
+- YouTube uploads can be marked Done/Not done for today.
 
 ## 9. Daily Task Generation Rules (LLM)
 Deterministic, simple, and only triggered once per IST day. (Currently not shown in UI.)
@@ -99,6 +101,7 @@ LLM formatting rules:
 ### 10.6 YouTube Upload Task
 - Admin uploads a video with title + description for a specific channel.
 - Intern downloads the video and uploads it to the channel with the provided title/description.
+- Intern marks the upload as Done/Not done.
 
 ## 11. Error & Edge Cases
 - **Missing prompt**: "Prompt missing" is shown for that subreddit.
@@ -141,49 +144,60 @@ RLS policies (minimum required):
 - `POST /api/logout`
 - Response: `200 { ok: true }`
 
-### 13.3 Interns (Admin)
+### 13.3 Admin Summary
+- `GET /api/admin-summary`
+- Response: `{ date, interns: [{ username, reddit, facebook, youtube, overall }] }`
+
+### 13.4 Interns (Admin)
 - `GET /api/interns`
 - Response: `{ interns: [{ id, username, created_at }] }`
 - `POST /api/interns`
 - Body: `{ username, password }`
 - Response: `200 { ok: true }` or `400/500 { error }`
 
-### 13.4 Daily Tasks
+### 13.5 Daily Tasks
 - `POST /api/daily-tasks`
 - Response: `{ tasks: Task[], generated: boolean }`
 - Errors: `500 { error }`, `401` if unauthorized
 
-### 13.5 Task Create
+### 13.6 Task Create
 - `POST /api/tasks`
 - Body: `{ title }`
 - Response: `200 { ok: true }` or `400/500 { error }`
 
-### 13.6 Reddit Draft
+### 13.7 Reddit Draft
 - `POST /api/reddit-prompt`
 - Body: `{ prompt, destination: { name, url? } }`
 - Response: `{ title, description }`
 - Errors: `400` missing fields, `500` LLM failure, `401` if unauthorized
 
-### 13.7 Reddit Status
+### 13.8 Reddit Status
 - `GET /api/reddit-status`
 - Response: `{ items: [{ destination_id, completed }] }`
 - `POST /api/reddit-status`
 - Body: `{ destinationId, completed }`
 - Response: `{ ok: true, completed }`
 
-### 13.8 Facebook Status
+### 13.9 Facebook Status
 - `GET /api/facebook-status`
 - Response: `{ items: [{ destination_id, completed }] }`
 - `POST /api/facebook-status`
 - Body: `{ destinationId, completed }`
 - Response: `{ ok: true, completed }`
 
-### 13.9 YouTube Videos
+### 13.10 YouTube Videos
 - `GET /api/youtube-videos`
 - Response: `{ videos: [{ id, destination_id, title, description, download_url }] }`
 - `POST /api/youtube-videos` (multipart)
 - Body: `destinationId`, `title`, `description`, `file`
 - `DELETE /api/youtube-videos?id=...`
+
+### 13.11 YouTube Status
+- `GET /api/youtube-status`
+- Response: `{ items: [{ video_id, completed }] }`
+- `POST /api/youtube-status`
+- Body: `{ videoId, completed }`
+- Response: `{ ok: true, completed }`
 
 ## 14. Success Criteria
 - Intern sees Reddit drafts without asking for instructions.
@@ -203,6 +217,8 @@ RLS policies (minimum required):
 - [x] Reddit task completion tracking (per day)
 - [x] Facebook moderation tracking (per day)
 - [x] YouTube video uploads for interns
+- [x] YouTube completion tracking (per day)
+- [x] Admin daily progress summary
 - [ ] Auto-posting/scheduling (future)
 ### 12.3 Table: `interns`
 - `id` uuid primary key
@@ -234,4 +250,13 @@ RLS policies (minimum required):
 - `title` text
 - `description` text
 - `file_path` text
+- `created_at` timestamptz default now()
+
+### 12.7 Table: `youtube_task_status`
+- `id` uuid primary key
+- `intern_id` uuid references interns(id)
+- `video_id` uuid references youtube_videos(id)
+- `task_date` date (IST day)
+- `completed` boolean
+- `completed_at` timestamptz nullable
 - `created_at` timestamptz default now()
