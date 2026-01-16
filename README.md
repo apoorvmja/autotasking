@@ -37,6 +37,10 @@ LLM_API_URL=https://api.openai.com/v1/chat/completions
 LLM_MODEL=gpt-4.1
 
 # Intern credentials are managed in /admin and stored in Supabase
+
+## Admin Access
+
+The /admin route uses HTTP Basic Auth with username `admin` and password `admin`.
 ```
 
 ## Learn More

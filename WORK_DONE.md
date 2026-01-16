@@ -27,6 +27,7 @@
 
 ### Completed
 - Admin can create intern usernames and passwords.
+- /admin uses HTTP Basic Auth (admin/admin).
 - Login verifies against interns table and sets a 30-day cookie.
 - Daily tasks are generated and stored per intern.
 - Manual task creation uses a server API that attaches intern_id.

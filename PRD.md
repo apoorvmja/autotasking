@@ -19,9 +19,10 @@ A lightweight, intern-focused system to list and execute daily posting tasks acr
 - **Admin**: maintains destinations and Reddit prompts.
 - **Intern**: reviews daily tasks, adds manual tasks, uses Reddit draft helper.
 
-## 5. Authentication (Admin-managed Intern Logins)
+## 5. Authentication (Admin Basic Auth + Intern Logins)
+- /admin is protected by HTTP Basic Auth (username: admin, password: admin).
 - Admin creates intern usernames and passwords in /admin.
-- Login sets an HTTP-only cookie (30 days) and gates /tasks, /admin, and LLM APIs.
+- Intern login sets an HTTP-only cookie (30 days) and gates /tasks and intern APIs.
 - Each intern has their own task list mapped to their account.
 
 ## 6. Core Entities
