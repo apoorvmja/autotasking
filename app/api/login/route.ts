@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { AUTH_COOKIE, getAuthToken, verifyCredentials } from "@/lib/auth";
+import { AUTH_COOKIE, encodeAuthCookie } from "@/lib/auth";
+import { supabaseServer } from "@/lib/supabase/server";
 
 type LoginPayload = {
   username?: string;
@@ -22,18 +23,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Username and password are required." }, { status: 400 });
   }
 
-  if (!verifyCredentials(username, password)) {
+  const { data, error } = await supabaseServer
+    .from("interns")
+    .select("id,username,password")
+    .eq("username", username)
+    .limit(1)
+    .maybeSingle();
+  if (error || !data || data.password !== password) {
     return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
   }
 
-  const token = getAuthToken();
+  const token = encodeAuthCookie({ id: data.id, username: data.username });
   const cookieStore = await cookies();
   cookieStore.set(AUTH_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: 60 * 60 * 24 * 30,
   });
 
   return NextResponse.json({ ok: true });

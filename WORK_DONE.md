@@ -22,3 +22,20 @@
   - Optional: `LLM_API_URL` (default `https://api.openai.com/v1/chat/completions`)
   - Optional: `LLM_MODEL` (default `gpt-4.1`)
 - Ensure RLS policies allow `select`, `insert`, and `update` on `posting_destinations`.
+
+## Feature: Intern accounts + per-intern tasks
+
+### Completed
+- Admin can create intern usernames and passwords.
+- Login verifies against interns table and sets a 30-day cookie.
+- Daily tasks are generated and stored per intern.
+- Manual task creation uses a server API that attaches intern_id.
+
+### Code locations
+- Intern admin UI: `app/admin/page.tsx`
+- Login API: `app/api/login/route.ts`
+- Interns API: `app/api/interns/route.ts`
+- Task create API: `app/api/tasks/route.ts`
+- Daily tasks API: `app/api/daily-tasks/route.ts`
+- Auth helpers: `lib/auth.ts`
+- Supabase migration: `supabase/migrations/0008_interns_and_task_mapping.sql`

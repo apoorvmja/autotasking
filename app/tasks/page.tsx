@@ -97,6 +97,7 @@ export default function TasksPage() {
 
   async function generateSuggestion(destination: PostingDestination) {
     if (!destination.prompt) return;
+    if (promptLoading[destination.id] || promptResults[destination.id]) return;
     setPromptLoading((prev) => ({ ...prev, [destination.id]: true }));
     setPromptErrors((prev) => ({ ...prev, [destination.id]: null }));
     try {
@@ -127,7 +128,7 @@ export default function TasksPage() {
           },
         }));
       }
-    } catch (err) {
+    } catch {
       setPromptErrors((prev) => ({
         ...prev,
         [destination.id]: "Network error while generating the draft.",
@@ -137,26 +138,46 @@ export default function TasksPage() {
     }
   }
 
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = draft.trim();
     if (!trimmed) return;
     setSaving(true);
-    const { error } = await supabase.from("tasks").insert({ title: trimmed });
-    if (error) {
-      setError(error.message);
-    } else {
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to save task.");
+      }
       setDraft("");
       setError(null);
       await loadTasks();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to save task.";
+      setError(message);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   useEffect(() => {
     void loadTasks();
     void loadRedditDestinations();
   }, []);
+
+  useEffect(() => {
+    if (redditLoading || redditDestinations.length === 0) return;
+    redditDestinations.forEach((destination) => {
+      if (destination.prompt?.trim()) {
+        void generateSuggestion(destination);
+      }
+    });
+  }, [redditLoading, redditDestinations]);
 
   return (
     <div
@@ -304,22 +325,12 @@ export default function TasksPage() {
           <section className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
               Reddit post drafts
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
-                  {redditDestinations.length} groups
-                </span>
-                <button
-                  className="rounded-full border-2 border-[var(--ink)] px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)] transition hover:bg-[var(--ink)] hover:text-white"
-                  type="button"
-                  onClick={() => void loadRedditDestinations()}
-                >
-                  Refresh
-                </button>
-              </div>
+              <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                {redditDestinations.length} groups
+              </span>
             </div>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">
-              Run the saved prompts for each subreddit to generate a ready-to-post title and
-              description.
+              Drafts generate automatically for each subreddit when you open this page.
             </p>
             <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
               {redditLoading && (
@@ -355,28 +366,19 @@ export default function TasksPage() {
                           {destination.url}
                         </a>
                       )}
-                      <div className="mt-3 flex flex-wrap items-center gap-3">
-                        <button
-                          className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
-                          type="button"
-                          disabled={!hasPrompt || promptLoading[destination.id]}
-                          onClick={() => void generateSuggestion(destination)}
-                        >
-                          {promptLoading[destination.id]
-                            ? "Generating"
-                            : result
-                              ? "Regenerate draft"
-                              : "Generate draft"}
-                        </button>
-                        {!hasPrompt && (
-                          <span className="text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
-                            Prompt missing
-                          </span>
-                        )}
-                      </div>
+                      {!hasPrompt && (
+                        <div className="mt-3 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                          Prompt missing
+                        </div>
+                      )}
                       {promptErrors[destination.id] && (
                         <div className="mt-3 text-xs text-red-600">
                           {promptErrors[destination.id]}
+                        </div>
+                      )}
+                      {hasPrompt && promptLoading[destination.id] && (
+                        <div className="mt-3 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                          Generating draft...
                         </div>
                       )}
                       {result ? (
@@ -395,9 +397,13 @@ export default function TasksPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="mt-4 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
-                          Run the prompt to get a draft for this subreddit.
-                        </div>
+                        hasPrompt &&
+                        !promptLoading[destination.id] &&
+                        !promptErrors[destination.id] && (
+                          <div className="mt-3 text-xs uppercase tracking-[0.25em] text-[var(--ink-soft)]">
+                            Draft will appear automatically.
+                          </div>
+                        )
                       )}
                     </div>
                   );

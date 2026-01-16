@@ -28,7 +28,7 @@ Create a `.env.local` file with the following values:
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 
-# Optional server-side key if you want to bypass RLS for server APIs
+# Required for server-side intern login + admin intern management
 SUPABASE_SERVICE_ROLE_KEY=...
 
 # LLM configuration (required for Reddit drafts + daily task generation)
@@ -36,12 +36,7 @@ LLM_API_KEY=... # or OPENAI_API_KEY
 LLM_API_URL=https://api.openai.com/v1/chat/completions
 LLM_MODEL=gpt-4.1
 
-# Simple login credentials (defaults: intern / intern)
-APP_USERNAME=intern
-APP_PASSWORD=intern
-
-# Cookie token for auth (default: autotasking)
-AUTH_TOKEN=autotasking
+# Intern credentials are managed in /admin and stored in Supabase
 ```
 
 ## Learn More

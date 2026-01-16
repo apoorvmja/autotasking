@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { AUTH_COOKIE, decodeAuthCookie } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type Destination = {
@@ -35,11 +37,12 @@ function getIstBounds(date = new Date()) {
   return { start: startUtc.toISOString(), end: endUtc.toISOString() };
 }
 
-async function fetchTasksForToday(): Promise<TaskRow[]> {
+async function fetchTasksForToday(internId: string): Promise<TaskRow[]> {
   const { start, end } = getIstBounds();
   const { data, error } = await supabaseServer
     .from("tasks")
     .select("id,title,created_at")
+    .eq("intern_id", internId)
     .gte("created_at", start)
     .lt("created_at", end)
     .order("created_at", { ascending: false });
@@ -153,7 +156,13 @@ async function generateTasks(destinations: Destination[]) {
 
 export async function POST() {
   try {
-    const existingTasks = await fetchTasksForToday();
+    const cookieStore = await cookies();
+    const auth = decodeAuthCookie(cookieStore.get(AUTH_COOKIE)?.value);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const existingTasks = await fetchTasksForToday(auth.id);
     if (existingTasks.length > 0) {
       return NextResponse.json({ tasks: existingTasks, generated: false });
     }
@@ -164,13 +173,13 @@ export async function POST() {
     }
 
     const titles = await generateTasks(destinations);
-    const inserts = titles.map((title) => ({ title }));
+    const inserts = titles.map((title) => ({ title, intern_id: auth.id }));
     const { error } = await supabaseServer.from("tasks").insert(inserts);
     if (error) {
       throw new Error(error.message);
     }
 
-    const refreshed = await fetchTasksForToday();
+    const refreshed = await fetchTasksForToday(auth.id);
     return NextResponse.json({ tasks: refreshed, generated: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to generate tasks.";

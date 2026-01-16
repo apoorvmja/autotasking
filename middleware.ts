@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AUTH_COOKIE, getAuthToken } from "@/lib/auth";
+import { AUTH_COOKIE, decodeAuthCookie } from "@/lib/auth";
 
 export function middleware(request: NextRequest) {
   const token = request.cookies.get(AUTH_COOKIE)?.value;
-  if (token === getAuthToken()) {
+  if (decodeAuthCookie(token)) {
     return NextResponse.next();
   }
 
@@ -18,5 +18,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/tasks/:path*", "/admin/:path*", "/api/daily-tasks", "/api/reddit-prompt"],
+  matcher: ["/tasks/:path*", "/admin/:path*", "/api/daily-tasks", "/api/reddit-prompt", "/api/interns", "/api/tasks"],
 };

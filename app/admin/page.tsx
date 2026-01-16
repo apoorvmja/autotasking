@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Manrope, Space_Grotesk } from "next/font/google";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase/client";
-import type { Platform, PostingDestination } from "@/lib/types/schema";
+import type { Intern, Platform, PostingDestination } from "@/lib/types/schema";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -38,6 +38,12 @@ export default function AdminPage() {
   const [url, setUrl] = useState("");
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
+  const [interns, setInterns] = useState<Intern[]>([]);
+  const [internUsername, setInternUsername] = useState("");
+  const [internPassword, setInternPassword] = useState("");
+  const [internLoading, setInternLoading] = useState(true);
+  const [internSaving, setInternSaving] = useState(false);
+  const [internError, setInternError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [promptEdits, setPromptEdits] = useState<Record<string, string>>({});
@@ -80,6 +86,24 @@ export default function AdminPage() {
     setLoading(false);
   }
 
+  async function loadInterns() {
+    setInternLoading(true);
+    try {
+      const response = await fetch("/api/interns");
+      const data = (await response.json()) as { interns?: Intern[]; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to load interns.");
+      }
+      setInterns(data.interns ?? []);
+      setInternError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load interns.";
+      setInternError(message);
+      setInterns([]);
+    }
+    setInternLoading(false);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmedName = name.trim();
@@ -106,6 +130,34 @@ export default function AdminPage() {
     setSaving(false);
   }
 
+  async function handleInternSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const username = internUsername.trim();
+    const password = internPassword.trim();
+    if (!username || !password) return;
+    setInternSaving(true);
+    try {
+      const response = await fetch("/api/interns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Unable to create intern.");
+      }
+      setInternUsername("");
+      setInternPassword("");
+      setInternError(null);
+      await loadInterns();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to create intern.";
+      setInternError(message);
+    } finally {
+      setInternSaving(false);
+    }
+  }
+
   async function handlePromptSave(id: string) {
     const draft = (promptEdits[id] ?? "").trim();
     setPromptSaving((prev) => ({ ...prev, [id]: true }));
@@ -124,6 +176,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     void loadDestinations();
+    void loadInterns();
   }, []);
 
   return (
@@ -360,6 +413,98 @@ export default function AdminPage() {
                       )}
                       <div className="mt-2 text-xs uppercase tracking-[0.25em]">
                         Added {formatDate(destination.created_at)}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
+            <div className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                Add intern
+              </div>
+              <h2 className={`mt-4 text-2xl font-semibold uppercase ${display.className}`}>
+                Create intern credentials
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-[var(--ink-soft)]">
+                Add a username and password so interns can log in and see their tasks.
+              </p>
+              <form className="mt-6 space-y-4" onSubmit={handleInternSubmit}>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                    Username
+                  </label>
+                  <input
+                    className="w-full rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
+                    value={internUsername}
+                    onChange={(event) => setInternUsername(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    className="w-full rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--ink)]"
+                    value={internPassword}
+                    onChange={(event) => setInternPassword(event.target.value)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    className="rounded-full bg-[var(--accent)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                    type="submit"
+                    disabled={internSaving || !internUsername.trim() || !internPassword.trim()}
+                  >
+                    {internSaving ? "Saving" : "Add intern"}
+                  </button>
+                  <button
+                    className="rounded-full border-2 border-[var(--ink)] px-5 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)] transition hover:bg-[var(--ink)] hover:text-white"
+                    type="button"
+                    onClick={() => void loadInterns()}
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </form>
+              {internError && (
+                <div className="mt-6 rounded-2xl border-2 border-[var(--ink)]/10 bg-white p-4 text-sm text-[var(--ink-soft)]">
+                  <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink)]">
+                    Intern notice
+                  </div>
+                  <p className="mt-2">{internError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-[32px] border-2 border-[var(--ink)] bg-white p-6 sm:p-8">
+              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-[var(--ink-soft)]">
+                Intern list
+                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[var(--ink)]">
+                  {interns.length} total
+                </span>
+              </div>
+              <div className="mt-6 space-y-4 text-sm text-[var(--ink-soft)]">
+                {internLoading && (
+                  <div className="rounded-2xl bg-[var(--paper)] p-4">Loading interns...</div>
+                )}
+                {!internLoading && interns.length === 0 && (
+                  <div className="rounded-2xl bg-[var(--paper)] p-4">
+                    No interns yet. Add a username and password to get started.
+                  </div>
+                )}
+                {!internLoading &&
+                  interns.map((intern) => (
+                    <div
+                      key={intern.id}
+                      className="rounded-2xl border-2 border-[var(--ink)]/10 bg-[var(--paper)] p-4"
+                    >
+                      <div className="text-[var(--ink)]">{intern.username}</div>
+                      <div className="mt-2 text-xs uppercase tracking-[0.25em]">
+                        Added {formatDate(intern.created_at)}
                       </div>
                     </div>
                   ))}

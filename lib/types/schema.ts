@@ -2,6 +2,7 @@ export type Task = {
   id: string;
   title: string;
   created_at: string | null;
+  intern_id?: string | null;
 };
 
 export type PostingDestination = {
@@ -14,3 +15,9 @@ export type PostingDestination = {
 };
 
 export type Platform = "Reddit" | "Facebook" | "YouTube" | "Other";
+
+export type Intern = {
+  id: string;
+  username: string;
+  created_at: string | null;
+};

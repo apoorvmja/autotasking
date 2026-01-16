@@ -85,7 +85,7 @@ export default function LoginPage() {
                 Access today's tasks
               </h1>
               <p className="max-w-md text-base leading-7 text-[var(--ink-soft)]">
-                Use the shared test credentials to unlock the daily task dashboard and Reddit drafts.
+                Use the intern credentials provided by the admin to access today's tasks and drafts.
               </p>
             </div>
 

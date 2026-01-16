@@ -13,16 +13,16 @@ A lightweight, intern-focused system to list and execute daily posting tasks acr
 - Auto-posting or scheduling on any platform.
 - Task completion workflows (checkboxes, statuses, approvals).
 - Analytics, performance tracking, or audit logs.
-- Multi-user role management beyond a single shared login.
+- Advanced role management beyond admin-managed intern logins.
 
 ## 4. Users
 - **Admin**: maintains destinations and Reddit prompts.
 - **Intern**: reviews daily tasks, adds manual tasks, uses Reddit draft helper.
 
-## 5. Authentication (Simple Shared Login)
-- Single shared username/password stored in env vars.
-- Login sets an HTTP-only cookie and gates /tasks, /admin, and LLM APIs.
-- No user accounts or profiles.
+## 5. Authentication (Admin-managed Intern Logins)
+- Admin creates intern usernames and passwords in /admin.
+- Login sets an HTTP-only cookie (30 days) and gates /tasks, /admin, and LLM APIs.
+- Each intern has their own task list mapped to their account.
 
 ## 6. Core Entities
 ### 6.1 Posting Destination
@@ -31,29 +31,34 @@ Fields: platform, name, optional URL, optional Reddit prompt.
 
 ### 6.2 Task
 A single freeform task line shown on /tasks.
-Fields: title, created_at.
+Fields: title, created_at, intern_id.
+
+### 6.3 Intern
+Login identity for interns.
+Fields: username, password, created_at.
 
 ## 7. Admin Panel (/admin)
 - Add destinations with platform, name, optional URL.
 - Reddit destinations include a prompt with placeholders: `{{group}}` and `{{url}}`.
 - Admin can edit and save Reddit prompts for each destination.
+- Admin can create intern usernames and passwords.
 
 ## 8. Intern Tasks Page (/tasks)
 - Shows today's tasks (most recent first).
 - Allows manual task entry (freeform text).
-- Shows Reddit destinations and allows draft generation per destination.
+- Reddit drafts are generated automatically and displayed (no button).
 
 ## 9. Daily Task Generation Rules (LLM)
 Deterministic, simple, and only triggered once per IST day.
 
 1. When an intern visits /tasks, the UI calls `POST /api/daily-tasks`.
-2. Server checks for tasks created today (IST date boundaries).
+2. Server checks for tasks created today for that intern (IST date boundaries).
 3. If tasks exist, return them unchanged.
 4. If no tasks exist:
    - Read all posting destinations.
    - If no destinations, return an empty list.
    - Otherwise, call the LLM to generate **exactly one task per destination**.
-5. Insert the generated tasks into `tasks` and return the list.
+5. Insert the generated tasks into `tasks` with the intern_id and return the list.
 
 LLM formatting rules:
 - Each task is a single line (8-14 words).
@@ -73,7 +78,7 @@ LLM formatting rules:
 - Should include platform + destination name for clarity.
 - If an asset is missing, the task explicitly mentions it (e.g., "asset missing").
 
-### 10.3 Reddit Draft
+### 10.3 Reddit Draft (Auto-generated in UI)
 - Destination has a non-empty prompt.
 - Prompt renders placeholders for `{{group}}` and optional `{{url}}`.
 - Response includes `title` and `description` only.
@@ -106,6 +111,7 @@ RLS policies (minimum required):
 ### 12.2 Table: `tasks`
 - `id` uuid primary key
 - `title` text
+- `intern_id` uuid references interns(id)
 - `created_at` timestamptz default now()
 
 RLS policies (minimum required):
@@ -121,12 +127,24 @@ RLS policies (minimum required):
 - `POST /api/logout`
 - Response: `200 { ok: true }`
 
-### 13.3 Daily Tasks
+### 13.3 Interns (Admin)
+- `GET /api/interns`
+- Response: `{ interns: [{ id, username, created_at }] }`
+- `POST /api/interns`
+- Body: `{ username, password }`
+- Response: `200 { ok: true }` or `400/500 { error }`
+
+### 13.4 Daily Tasks
 - `POST /api/daily-tasks`
 - Response: `{ tasks: Task[], generated: boolean }`
 - Errors: `500 { error }`, `401` if unauthorized
 
-### 13.4 Reddit Draft
+### 13.5 Task Create
+- `POST /api/tasks`
+- Body: `{ title }`
+- Response: `200 { ok: true }` or `400/500 { error }`
+
+### 13.6 Reddit Draft
 - `POST /api/reddit-prompt`
 - Body: `{ prompt, destination: { name, url? } }`
 - Response: `{ title, description }`
@@ -140,10 +158,15 @@ RLS policies (minimum required):
 
 ## 15. Implementation Status (as of 2026-01-16)
 - [x] Admin destination management
-- [x] Reddit prompt storage + draft generation
+- [x] Reddit prompt storage + draft generation UI (auto-run)
 - [x] Intern task list + manual task entry
 - [x] Daily LLM task generation on first visit (UTC day)
-- [x] Simple shared login gate
+- [x] Admin-managed intern logins
 - [x] Supabase schema + policies for tasks/destinations
 - [ ] Task completion tracking (explicitly out of scope)
 - [ ] Auto-posting/scheduling (future)
+### 12.3 Table: `interns`
+- `id` uuid primary key
+- `username` text (unique)
+- `password` text
+- `created_at` timestamptz default now()
